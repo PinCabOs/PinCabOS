@@ -97,5 +97,63 @@
       <skip_taskbar>yes</skip_taskbar>
       <position force="yes"><x>24</x><y>24</y><monitor>8</monitor></position>
     </application>
+    <!-- PINCABOS_INSTALLEUR_DECOR_V1 : fonds des dalles secondaires pendant l installation,
+         calque en dessous du kiosque, jamais le focus. -->
+    <application title="pincabos-decor-1">
+      <decor>no</decor>
+      <focus>no</focus>
+      <layer>below</layer>
+      <skip_pager>yes</skip_pager>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
+    <application title="pincabos-decor-2">
+      <decor>no</decor>
+      <focus>no</focus>
+      <layer>below</layer>
+      <skip_pager>yes</skip_pager>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
+    <application title="pincabos-decor-3">
+      <decor>no</decor>
+      <focus>no</focus>
+      <layer>below</layer>
+      <skip_pager>yes</skip_pager>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
+    <application title="pincabos-decor-4">
+      <decor>no</decor>
+      <focus>no</focus>
+      <layer>below</layer>
+      <skip_pager>yes</skip_pager>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
+    <application title="pincabos-decor-5">
+      <decor>no</decor>
+      <focus>no</focus>
+      <layer>below</layer>
+      <skip_pager>yes</skip_pager>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
+    <application title="pincabos-decor-6">
+      <decor>no</decor>
+      <focus>no</focus>
+      <layer>below</layer>
+      <skip_pager>yes</skip_pager>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
+    <application title="pincabos-decor-7">
+      <decor>no</decor>
+      <focus>no</focus>
+      <layer>below</layer>
+      <skip_pager>yes</skip_pager>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
+    <application title="pincabos-decor-8">
+      <decor>no</decor>
+      <focus>no</focus>
+      <layer>below</layer>
+      <skip_pager>yes</skip_pager>
+      <skip_taskbar>yes</skip_taskbar>
+    </application>
   </applications>
 </openbox_config>

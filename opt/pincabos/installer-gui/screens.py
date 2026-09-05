@@ -416,6 +416,46 @@ def code_orient(rotation: int) -> str:
 
 
 # ---------------------------------------------------------------- identification
+DECOR = Path(__file__).resolve().parent / "decor.py"
+GALERIE_DECOR = Path("/opt/pincabos/media/splash")
+
+
+def images_decor(monitors: list, roles: dict, galerie: Path = GALERIE_DECOR, tirage=None) -> dict:
+    """PINCABOS_INSTALLEUR_DECOR_V1 : un visuel paysage de la galerie pour chaque dalle qui n'est pas le playfield."""
+    import random
+    paysages = sorted(p for p in galerie.glob("paysage*") if p.suffix.lower() in (".png", ".jpg", ".jpeg"))
+    if not paysages:
+        return {}
+    tirage = tirage or random.Random()
+    pf = roles.get("playfield") or ""
+    out = {}
+    for m in monitors:
+        if m["name"] == pf:
+            continue
+        out[m["name"]] = str(tirage.choice(paysages))
+    return out
+
+
+def lancer_decor(monitors: list, roles: dict, run_dir: Path = Path("/run/pincabos")) -> dict:
+    """Pose (ou repose) les fonds des dalles secondaires ; le precedent decor est arrete."""
+    import signal
+    import subprocess
+    pid_file = run_dir / "decor.pid"
+    try:
+        os.kill(int(pid_file.read_text().strip()), signal.SIGTERM)
+    except (OSError, ValueError):
+        pass
+    images = images_decor(monitors, roles)
+    if not images or not DECOR.exists():
+        return {"ok": False, "dalles": 0}
+    env = dict(os.environ, DISPLAY=DISPLAY)
+    p = subprocess.Popen(["python3", str(DECOR), "--monitors", json.dumps(images)], env=env,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+    run_dir.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text(str(p.pid), encoding="utf-8")
+    return {"ok": True, "dalles": len(images), "images": images}
+
+
 def identifier(monitors: list, roles: dict, secondes: int = 6, run=executer, libelles: dict | None = None) -> dict:
     """Affiche sur chaque dalle son numéro (1 = première sortie), son nom et son rôle."""
     libelles = libelles or {"playfield": "Playfield", "backglass": "Backglass", "fulldmd": "DMD", "topper": "Topper"}

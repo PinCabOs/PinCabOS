@@ -17,12 +17,59 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import subprocess
 from datetime import datetime
 from pathlib import Path
 
 CONFIG = Path("/opt/pincabos/config/audio-router.json")
 VPX_INI = Path("/home/pinball/.pincabos/vpx/VPinballX.ini")
+VPX_LEGACY_INI = Path("/home/pinball/.local/share/VPinballX/10.8/VPinballX.ini")
+
+
+def assurer_pref_vpx(vpx_ini: Path = VPX_INI, legacy_ini: Path = VPX_LEGACY_INI) -> str:
+    """PINCABOS_VPX_PREF_MIGRATION_V1 : meme migration que VPXlauncher.pincabos-original.sh.
+
+    Le lanceur deplace ~/.local/share/VPinballX/10.8 (ini complet du cab : mode
+    cabinet, BGSet, DOF…) vers ~/.pincabos/vpx SEULEMENT si ce dossier n existe
+    pas. Creer l ini nous-memes (V2, 05/09) l en empechait : VPX partait avec
+    un ini minimal, table en paysage, DOF absent (retex cab de Yann). On fait
+    donc la migration ici, a l identique, avant d ecrire nos cles.
+    """
+    pref, legacy = vpx_ini.parent, legacy_ini.parent
+    if not pref.exists():
+        pref.parent.mkdir(parents=True, exist_ok=True)
+        if legacy.is_dir() and not legacy.is_symlink():
+            shutil.move(str(legacy), str(pref))
+            etat = "dossier VPX migre"
+        else:
+            pref.mkdir(parents=True, exist_ok=True)
+            etat = "dossier VPX cree"
+    else:
+        etat = "dossier VPX present"
+        # PINCABOS_VPX_PREF_REPARATION_V1 : un ini minimal (cree par la V2 du 05/09, sans
+        # section [Version]) a cote d un dossier legacy complet -> on reprend le dossier
+        # complet (ini, directoutputconfig...) et l ini minimal est garde en .minimal
+        minimal = vpx_ini.is_file() and "[Version]" not in vpx_ini.read_text(encoding="utf-8", errors="replace")
+        if minimal and legacy.is_dir() and not legacy.is_symlink() and legacy_ini.is_file() and "[Version]" in legacy_ini.read_text(encoding="utf-8", errors="replace"):
+            shutil.move(str(vpx_ini), str(vpx_ini) + ".minimal")
+            for element in legacy.iterdir():
+                cible = pref / element.name
+                if cible.exists():
+                    continue
+                shutil.move(str(element), str(cible))
+            shutil.rmtree(legacy, ignore_errors=True)
+            etat = "dossier VPX repare depuis l ancien chemin (ini minimal ecarte)"
+    if not legacy.exists() and not legacy.is_symlink():
+        legacy.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            legacy.symlink_to(pref)
+        except OSError:
+            pass
+    if not vpx_ini.is_file() and legacy_ini.is_file() and legacy_ini.resolve() != vpx_ini.resolve():
+        shutil.copy2(legacy_ini, vpx_ini)
+        etat += ", ini copie"
+    return etat
 FONCTION = "Audio SSF VPX Routing V2"          # même signature que la page Audio du cab
 DEFAUTS = {
     "audio_mode": "dual", "audio_backend": "alsa", "backbox_device": "", "playfield_device": "",
@@ -147,6 +194,29 @@ def tester(ident: str, run=executer, canaux: int = 2) -> dict:
     return {"ok": rc == 0, "sortie": out.strip()[-300:]}
 
 
+# PINCABOS_AUDIO_HP_UN_PAR_UN_V1 : ordre ALSA des canaux (speaker-test -s est 1-base)
+CANAUX = {2: ["FL", "FR"], 4: ["FL", "FR", "RL", "RR"], 6: ["FL", "FR", "RL", "RR", "C", "LFE"],
+          8: ["FL", "FR", "RL", "RR", "C", "LFE", "SL", "SR"]}
+
+
+def canaux_pour_mode(sound3d: str) -> int:
+    """Nombre de canaux qu'exige le mode VPX : 2 en stereo (0, 1), 6 pour les modes SSF."""
+    return 2 if str(sound3d) in ("0", "1") else 6
+
+
+def tester_canal(ident: str, canaux: int, canal: int, run=executer) -> dict:
+    """Joue la voix « Front Left »… sur UN haut-parleur : speaker-test -c <canaux> -s <canal+1>."""
+    if not HW_RE.match(ident or ""):
+        return {"ok": False, "sortie": "identifiant ALSA invalide"}
+    if canaux not in CANAUX or not 0 <= canal < canaux:
+        return {"ok": False, "sortie": f"canal {canal} hors des {canaux} canaux"}
+    rc, out = run(["speaker-test", "-D", ident, "-c", str(canaux), "-t", "wav", "-s", str(canal + 1), "-l", "1"], timeout=40)
+    sortie = out.strip()[-300:]
+    if rc != 0 and "not available" in sortie.lower():
+        sortie = f"cette sortie n'offre pas {canaux} canaux : {sortie}"
+    return {"ok": rc == 0, "canal": CANAUX[canaux][canal], "sortie": sortie}
+
+
 def volume_alsa(ident: str, pourcent: int, run=executer) -> dict:
     """Volume de la carte (amixer), best effort : premier contrôle utile de la carte."""
     m = HW_RE.match(ident or "")
@@ -251,7 +321,7 @@ def commande_pinball(args: list) -> list:
             "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus", *args]
 
 
-def appliquer_premier_demarrage(cfg: dict, run=executer, vpx_ini: Path = VPX_INI) -> list:
+def appliquer_premier_demarrage(cfg: dict, run=executer, vpx_ini: Path = VPX_INI, vpx_legacy_ini: Path = VPX_LEGACY_INI) -> list:
     """Traduit le choix de l'installeur (ALSA) en réglages de la session : VPX, sortie par défaut, volume."""
     journal = []
     inst = cfg.get("installer") or {}
@@ -274,6 +344,7 @@ def appliquer_premier_demarrage(cfg: dict, run=executer, vpx_ini: Path = VPX_INI
     # crée avec la seule section [Player], VPX complète le reste à son premier
     # lancement. Sans sink connu on n'écrit rien : rien à traduire.
     if pf or bg:
+        journal.append("VPX : " + assurer_pref_vpx(vpx_ini, vpx_legacy_ini))
         texte = vpx_ini.read_text(encoding="utf-8", errors="replace") if vpx_ini.is_file() else ""
         nouveau = ecrire_vpx(texte, bg["description"] if bg else "", pf["description"] if pf else "", str(inst.get("sound3d", "0")))
         if nouveau != texte:
