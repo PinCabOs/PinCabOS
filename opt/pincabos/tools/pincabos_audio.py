@@ -47,6 +47,19 @@ def assurer_pref_vpx(vpx_ini: Path = VPX_INI, legacy_ini: Path = VPX_LEGACY_INI)
             etat = "dossier VPX cree"
     else:
         etat = "dossier VPX present"
+        # PINCABOS_VPX_PREF_REPARATION_V1 : un ini minimal (cree par la V2 du 05/09, sans
+        # section [Version]) a cote d un dossier legacy complet -> on reprend le dossier
+        # complet (ini, directoutputconfig...) et l ini minimal est garde en .minimal
+        minimal = vpx_ini.is_file() and "[Version]" not in vpx_ini.read_text(encoding="utf-8", errors="replace")
+        if minimal and legacy.is_dir() and not legacy.is_symlink() and legacy_ini.is_file() and "[Version]" in legacy_ini.read_text(encoding="utf-8", errors="replace"):
+            shutil.move(str(vpx_ini), str(vpx_ini) + ".minimal")
+            for element in legacy.iterdir():
+                cible = pref / element.name
+                if cible.exists():
+                    continue
+                shutil.move(str(element), str(cible))
+            shutil.rmtree(legacy, ignore_errors=True)
+            etat = "dossier VPX repare depuis l ancien chemin (ini minimal ecarte)"
     if not legacy.exists() and not legacy.is_symlink():
         legacy.parent.mkdir(parents=True, exist_ok=True)
         try:
