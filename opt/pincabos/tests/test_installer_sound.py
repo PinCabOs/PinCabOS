@@ -96,6 +96,24 @@ class Audio(unittest.TestCase):
         n2 = pa.ecrire_vpx(n, "Built-in Audio Analog Stereo", "HDA NVidia HDMI 1", "2")
         self.assertEqual(n2.count("par PinCabOS fonction("), 3)      # un commentaire par cle, jamais empile
 
+    def test_migration_du_dossier_vpx_avant_ecriture(self):
+        # PINCABOS_VPX_PREF_MIGRATION_V1 : l ini complet du cab (legacy) devient celui de ~/.pincabos/vpx
+        sinks = "Sink #1\n\tName: alsa_output.pci-0000_00_05.0.analog-stereo\n\tDescription: HDA Intel Analog\n\tSample Specification: s16le 2ch 48000Hz\n\tProperties:\n\t\talsa.card = \"0\"\n\t\talsa.device = \"0\"\n"
+        with tempfile.TemporaryDirectory() as d:
+            legacy = Path(d, "legacy", "10.8"); legacy.mkdir(parents=True)
+            (legacy / "VPinballX.ini").write_text("[Player]\nPlayfieldFullScreen = 1\nBGSet = 1\n", encoding="utf-8")
+            (legacy / "directoutputconfig").mkdir()
+            pref_ini = Path(d, "pref", "vpx", "VPinballX.ini")
+            j = pa.appliquer_premier_demarrage({"playfield_device": "hw:0,0", "backbox_device": "", "installer": {"sound3d": "0", "volume": 70}},
+                                               run=lambda a, timeout=20: (0, sinks if "list" in a else ""), vpx_ini=pref_ini, vpx_legacy_ini=legacy / "VPinballX.ini")
+            self.assertTrue(any("migre" in l for l in j), j)
+            texte = pref_ini.read_text(encoding="utf-8")
+            self.assertIn("BGSet = 1", texte)                       # l ini complet a suivi
+            self.assertIn("SoundDevice = HDA Intel Analog", texte)   # nos cles par-dessus
+            self.assertTrue((pref_ini.parent / "directoutputconfig").is_dir())
+            self.assertTrue(legacy.is_symlink())                     # l ancien chemin pointe sur le nouveau
+            self.assertFalse(any("ini créé" in l for l in j))
+
     def test_haut_parleurs_un_par_un(self):
         # PINCABOS_AUDIO_HP_UN_PAR_UN_V1 (Yann : « pouvoir tester les haut-parleurs un par un »)
         appels = []
@@ -178,7 +196,7 @@ class Audio(unittest.TestCase):
             self.assertTrue(any("set-sink-volume" in a and "65%" in a for a in appels))
             self.assertFalse(any("wpctl" in " ".join(a) for a in appels))   # wpctl set-default veut un id numerique
             self.assertTrue(all(a[:3] == ["runuser", "-u", "pinball"] for a in appels))
-            self.assertEqual(len(j), 3)
+            self.assertEqual(len(j), 4)   # + la ligne de migration du dossier VPX (PINCABOS_VPX_PREF_MIGRATION_V1)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 

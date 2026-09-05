@@ -406,7 +406,8 @@ class Assistant(unittest.TestCase):
             self.assertTrue(Path(RACINE, "opt/pincabos/installer-gui/static/egerie", p + ".webp").is_file(), p)
         self.assertIn('class="egerie egerie-page" id="egerie"', w)
         self.assertIn("main{position:relative;z-index:1}", w)
-        self.assertIn("go=function(id){_goSansEgerie(id);egeriePour(id)}", w)
+        self.assertIn('go=function(id){_goSansEgerie(id);egeriePour(id);document.body.classList.toggle("on-st-done",id==="st-done")}', w)
+        self.assertIn("body.on-st-done .egerie-page{max-height:90vh", w)
 
     def test_rotation_de_lecture_jamais_ecrite(self):
         # PINCABOS_INSTALLEUR_LECTURE_V1 (Yann) : l assistant tourne, la config reste standard

@@ -74,6 +74,8 @@ main{position:relative;z-index:1}
 .egerie-page{position:fixed;right:1.2vw;bottom:30px;z-index:0;max-height:52vh;max-width:max(120px,calc((100vw - 900px)/2 - 20px));
   filter:drop-shadow(0 0 22px rgba(255,138,0,.28));transition:opacity .18s ease}
 .egerie-page.swap{opacity:0}
+/* PINCABOS_INSTALLEUR_EGERIE_V3 : sur Termine, Miss Tilt en vedette (grande, a droite, devant le fond) */
+body.on-st-done .egerie-page{max-height:90vh;max-width:44vw;right:4vw;bottom:0;filter:drop-shadow(0 0 40px rgba(255,138,0,.45))}
 #st-progress .card{position:relative;overflow:hidden;min-height:260px}
 .credits{position:fixed;right:14px;bottom:8px;font-size:12px;color:var(--muted);opacity:.75;letter-spacing:.02em}
 .hint{color:var(--muted);font-size:.92rem;margin-top:10px;min-height:1.2em}
@@ -762,7 +764,7 @@ const EGERIE_PAGES={"st-lang":"pose-07-salut-futuriste","st-regional":"pose-03-d
 document.body.insertAdjacentHTML("beforeend",'<img class="egerie egerie-page" id="egerie" alt="" onerror="this.hidden=true">');
 function egeriePour(id){const im=document.getElementById("egerie"),p=EGERIE_PAGES[id];if(!im||!p)return;
   im.classList.add("swap");setTimeout(()=>{im.hidden=false;im.src="/static/egerie/"+p+".webp";im.classList.remove("swap")},180)}
-const _goSansEgerie=go;go=function(id){_goSansEgerie(id);egeriePour(id)};
+const _goSansEgerie=go;go=function(id){_goSansEgerie(id);egeriePour(id);document.body.classList.toggle("on-st-done",id==="st-done")};
 egeriePour("st-lang");
 // PINCABOS_INSTALLEUR_REPONSE_NULLE_V1 : un refus du serveur se lit ici même
 // (code + détail), le bouton redevient actif ; avant, il était avalé en silence.
