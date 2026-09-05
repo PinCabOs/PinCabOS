@@ -177,7 +177,19 @@
     "sound3d_hint_3": "Nécessite une carte son 5.1/7.1 réglée en surround et des exciters câblés sur les canaux avant. Sur une sortie stéréo, le premier démarrage retombe en stéréo.",
     "sound3d_hint_4": "Nécessite une carte 5.1/7.1 : canaux latéraux et arrière. Sur une sortie stéréo, le premier démarrage retombe en stéréo.",
     "sound3d_hint_5": "Nécessite une carte 5.1/7.1 : canaux latéraux et arrière, mixage VPX 10.8. Sur une sortie stéréo, le premier démarrage retombe en stéréo.",
-    "snd_mode_hint": "Le mode dit à VPX sur quels canaux jouer les sons de table (SSF = Surround Sound Feedback)."
+    "snd_mode_hint": "Le mode dit à VPX sur quels canaux jouer les sons de table (SSF = Surround Sound Feedback).",
+    "snd_speakers": "Haut-parleurs",
+    "hp_fl": "Avant gauche",
+    "hp_fr": "Avant droit",
+    "hp_rl": "Arrière gauche",
+    "hp_rr": "Arrière droit",
+    "hp_c": "Centre",
+    "hp_lfe": "Caisson",
+    "hp_sl": "Latéral gauche",
+    "hp_sr": "Latéral droit",
+    "snd_speakers_hint2": "Chaque bouton fait parler un seul haut-parleur (la voix annonce le canal en anglais). Vérifiez que c'est bien celui-là qui parle.",
+    "snd_speakers_hint6": "Mode 6 canaux : chaque bouton fait parler un seul haut-parleur (voix en anglais). Si la sortie refuse 6 canaux, elle est stéréo : choisissez un mode 2 canaux ou une autre sortie.",
+    "snd_speaker_ok": "Joué sur :"
   },
   "en": {
     "choose_lang": "Choose your language",
@@ -357,7 +369,19 @@
     "sound3d_hint_3": "Needs a 5.1/7.1 sound card set to surround and exciters wired on the front channels. On a stereo output first boot falls back to stereo.",
     "sound3d_hint_4": "Needs a 5.1/7.1 card: side and rear channels. On a stereo output first boot falls back to stereo.",
     "sound3d_hint_5": "Needs a 5.1/7.1 card: side and rear channels, VPX 10.8 mix. On a stereo output first boot falls back to stereo.",
-    "snd_mode_hint": "The mode tells VPX which channels play the table sounds (SSF = Surround Sound Feedback)."
+    "snd_mode_hint": "The mode tells VPX which channels play the table sounds (SSF = Surround Sound Feedback).",
+    "snd_speakers": "Speakers",
+    "hp_fl": "Front left",
+    "hp_fr": "Front right",
+    "hp_rl": "Rear left",
+    "hp_rr": "Rear right",
+    "hp_c": "Center",
+    "hp_lfe": "Subwoofer",
+    "hp_sl": "Side left",
+    "hp_sr": "Side right",
+    "snd_speakers_hint2": "Each button makes a single speaker talk (the voice names the channel). Check that the right one speaks.",
+    "snd_speakers_hint6": "6-channel mode: each button makes a single speaker talk. If the output refuses 6 channels it is stereo: pick a 2-channel mode or another output.",
+    "snd_speaker_ok": "Played on:"
   },
   "de": {
     "choose_lang": "Sprache auswählen",
@@ -537,7 +561,19 @@
     "sound3d_hint_3": "Braucht eine 5.1/7.1-Soundkarte im Surround-Modus und Exciter auf den vorderen Kanälen. Auf Stereo fällt der erste Start auf Stereo zurück.",
     "sound3d_hint_4": "Braucht eine 5.1/7.1-Karte: Seiten- und Rückkanäle. Auf Stereo fällt der erste Start auf Stereo zurück.",
     "sound3d_hint_5": "Braucht eine 5.1/7.1-Karte: Seiten- und Rückkanäle, Mix von VPX 10.8. Auf Stereo fällt der erste Start auf Stereo zurück.",
-    "snd_mode_hint": "Der Modus sagt VPX, auf welchen Kanälen die Tischgeräusche spielen (SSF = Surround Sound Feedback)."
+    "snd_mode_hint": "Der Modus sagt VPX, auf welchen Kanälen die Tischgeräusche spielen (SSF = Surround Sound Feedback).",
+    "snd_speakers": "Lautsprecher",
+    "hp_fl": "Vorne links",
+    "hp_fr": "Vorne rechts",
+    "hp_rl": "Hinten links",
+    "hp_rr": "Hinten rechts",
+    "hp_c": "Center",
+    "hp_lfe": "Subwoofer",
+    "hp_sl": "Seite links",
+    "hp_sr": "Seite rechts",
+    "snd_speakers_hint2": "Jede Taste lässt einen einzelnen Lautsprecher sprechen (die Stimme nennt den Kanal auf Englisch). Prüfen Sie, dass der richtige spricht.",
+    "snd_speakers_hint6": "6-Kanal-Modus: jede Taste lässt einen einzelnen Lautsprecher sprechen. Lehnt der Ausgang 6 Kanäle ab, ist er Stereo: 2-Kanal-Modus oder anderen Ausgang wählen.",
+    "snd_speaker_ok": "Gespielt auf:"
   },
   "it": {
     "choose_lang": "Scegli la tua lingua",
@@ -717,7 +753,19 @@
     "sound3d_hint_3": "Richiede una scheda audio 5.1/7.1 in surround ed exciter cablati sui canali anteriori. Su un'uscita stereo il primo avvio torna in stereo.",
     "sound3d_hint_4": "Richiede una scheda 5.1/7.1: canali laterali e posteriori. Su un'uscita stereo il primo avvio torna in stereo.",
     "sound3d_hint_5": "Richiede una scheda 5.1/7.1: canali laterali e posteriori, mix VPX 10.8. Su un'uscita stereo il primo avvio torna in stereo.",
-    "snd_mode_hint": "La modalità dice a VPX su quali canali suonare i suoni del tavolo (SSF = Surround Sound Feedback)."
+    "snd_mode_hint": "La modalità dice a VPX su quali canali suonare i suoni del tavolo (SSF = Surround Sound Feedback).",
+    "snd_speakers": "Altoparlanti",
+    "hp_fl": "Anteriore sinistro",
+    "hp_fr": "Anteriore destro",
+    "hp_rl": "Posteriore sinistro",
+    "hp_rr": "Posteriore destro",
+    "hp_c": "Centrale",
+    "hp_lfe": "Subwoofer",
+    "hp_sl": "Laterale sinistro",
+    "hp_sr": "Laterale destro",
+    "snd_speakers_hint2": "Ogni pulsante fa parlare un solo altoparlante (la voce dice il canale in inglese). Verifica che parli quello giusto.",
+    "snd_speakers_hint6": "Modalità 6 canali: ogni pulsante fa parlare un solo altoparlante. Se l'uscita rifiuta 6 canali è stereo: scegli una modalità a 2 canali o un'altra uscita.",
+    "snd_speaker_ok": "Riprodotto su:"
   },
   "es": {
     "choose_lang": "Elige tu idioma",
@@ -897,6 +945,18 @@
     "sound3d_hint_3": "Necesita una tarjeta 5.1/7.1 en surround y exciters cableados en los canales delanteros. En una salida estéreo el primer arranque vuelve a estéreo.",
     "sound3d_hint_4": "Necesita una tarjeta 5.1/7.1: canales laterales y traseros. En una salida estéreo el primer arranque vuelve a estéreo.",
     "sound3d_hint_5": "Necesita una tarjeta 5.1/7.1: canales laterales y traseros, mezcla VPX 10.8. En una salida estéreo el primer arranque vuelve a estéreo.",
-    "snd_mode_hint": "El modo indica a VPX en qué canales sonar los sonidos de la mesa (SSF = Surround Sound Feedback)."
+    "snd_mode_hint": "El modo indica a VPX en qué canales sonar los sonidos de la mesa (SSF = Surround Sound Feedback).",
+    "snd_speakers": "Altavoces",
+    "hp_fl": "Delantero izquierdo",
+    "hp_fr": "Delantero derecho",
+    "hp_rl": "Trasero izquierdo",
+    "hp_rr": "Trasero derecho",
+    "hp_c": "Central",
+    "hp_lfe": "Subwoofer",
+    "hp_sl": "Lateral izquierdo",
+    "hp_sr": "Lateral derecho",
+    "snd_speakers_hint2": "Cada botón hace hablar a un solo altavoz (la voz dice el canal en inglés). Comprueba que hable el correcto.",
+    "snd_speakers_hint6": "Modo 6 canales: cada botón hace hablar a un solo altavoz. Si la salida rechaza 6 canales es estéreo: elige un modo de 2 canales u otra salida.",
+    "snd_speaker_ok": "Reproducido en:"
   }
 }

@@ -179,6 +179,11 @@ def screens_apply():
         return jsonify({"ok": False, "erreurs": [f"rotation de lecture invalide : {a.get('lecture')}"]}), 200
     res = pco_screens.appliquer(mons, roles, rotation, lecture=lecture)
     if res.get("ok"):
+        # PINCABOS_INSTALLEUR_DECOR_V1 : backglass, full DMD, topper habilles des visuels de la galerie
+        try:
+            res["decor"] = pco_screens.lancer_decor(mons, roles)
+        except Exception as exc:
+            res["decor"] = {"ok": False, "erreur": str(exc)}
         try:
             RUN_DIR.mkdir(parents=True, exist_ok=True)
             KIOSK_TARGET.write_text(roles["playfield"] + "\n", encoding="utf-8")
@@ -272,6 +277,24 @@ def sound_status():
     except Exception as exc:
         return jsonify({"disponible": False, "error": str(exc), "audio": {"devices": [], "proposition": {}, "modes": []},
                         "dof": {"detected": [], "proposition": {"enabled": False}}})
+
+
+@app.route("/api/sound/test-channel", methods=["POST"])
+def sound_test_channel():
+    """PINCABOS_AUDIO_HP_UN_PAR_UN_V1 : speaker-test sur un seul canal (la voix annonce le haut-parleur)."""
+    a = request.get_json(force=True, silent=True) or {}
+    ident = str(a.get("device") or "")
+    if pco_audio is None:
+        return jsonify({"ok": False, "sortie": "module audio absent"})
+    if not pco_audio.HW_RE.match(ident):
+        return jsonify({"ok": False, "sortie": "sortie invalide"})
+    try:
+        canaux, canal = int(a.get("channels", 2)), int(a.get("channel", 0))
+    except (TypeError, ValueError):
+        return jsonify({"ok": False, "sortie": "canal invalide"})
+    if DEMO:
+        return jsonify({"ok": True, "sortie": f"canal {canal + 1}/{canaux} joué (démo) sur {ident}"})
+    return jsonify(pco_audio.tester_canal(ident, canaux, canal))
 
 
 @app.route("/api/sound/test", methods=["POST"])

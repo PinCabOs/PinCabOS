@@ -96,6 +96,30 @@ class Audio(unittest.TestCase):
         n2 = pa.ecrire_vpx(n, "Built-in Audio Analog Stereo", "HDA NVidia HDMI 1", "2")
         self.assertEqual(n2.count("par PinCabOS fonction("), 3)      # un commentaire par cle, jamais empile
 
+    def test_haut_parleurs_un_par_un(self):
+        # PINCABOS_AUDIO_HP_UN_PAR_UN_V1 (Yann : « pouvoir tester les haut-parleurs un par un »)
+        appels = []
+
+        def run(args, timeout=20):
+            appels.append(args)
+            return (0, "")
+        r = pa.tester_canal("hw:1,3", 6, 2, run)
+        self.assertTrue(r["ok"]); self.assertEqual(r["canal"], "RL")
+        self.assertEqual(appels[-1], ["speaker-test", "-D", "hw:1,3", "-c", "6", "-t", "wav", "-s", "3", "-l", "1"])
+        self.assertFalse(pa.tester_canal("hw:1,3", 6, 6, run)["ok"])
+        self.assertFalse(pa.tester_canal("hw:1,3", 3, 0, run)["ok"])
+        r = pa.tester_canal("hw:0,0", 6, 0, lambda a, timeout=20: (1, "Channels count (6) not available for playbacks: Invalid argument"))
+        self.assertFalse(r["ok"]); self.assertIn("n'offre pas 6 canaux", r["sortie"])
+        self.assertEqual(pa.canaux_pour_mode("0"), 2); self.assertEqual(pa.canaux_pour_mode("5"), 6)
+        a = Path(RACINE, "opt/pincabos/installer-gui/app.py").read_text(encoding="utf-8")
+        self.assertIn('@app.route("/api/sound/test-channel", methods=["POST"])', a)
+        w = Path(RACINE, "opt/pincabos/installer-gui/templates/wizard.html").read_text(encoding="utf-8")
+        self.assertIn('id="snd-speakers"', w); self.assertIn("function testSpeaker(", w)
+        i18n = json.loads(Path(RACINE, "opt/pincabos/installer-gui/i18n.json").read_text(encoding="utf-8"))
+        for l in ("fr", "en", "de", "it", "es"):
+            for k in ("hp_fl", "hp_lfe", "snd_speakers_hint6", "snd_speaker_ok"):
+                self.assertIn(k, i18n[l], (l, k))
+
     def test_ssf_sur_sortie_stereo_retombe_en_stereo(self):
         # PINCABOS_AUDIO_SSF_GARDE_V1 (Yann : « le SSF ne joue pas les sons »)
         sinks = ("Sink #1\n\tName: alsa_output.pci-0000_00_05.0.analog-stereo\n\tDescription: Built-in Audio Analog Stereo\n"

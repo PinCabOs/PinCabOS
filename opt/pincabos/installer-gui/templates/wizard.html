@@ -260,6 +260,9 @@ button{
     <div class="hint" id="snd-mode-hint" style="margin:-4px 0 10px"></div>
     <div class="row"><label data-i18n="snd_volume"></label><input type="range" id="snd-vol" min="0" max="100" step="5" style="flex:1"><b id="snd-vol-val" style="min-width:3.5em;text-align:right">70 %</b></div>
     <div class="row" style="margin:6px 0 0"><button type="button" class="ghost" id="snd-test" onclick="testSound()" data-i18n="snd_test"></button><span class="hint" id="snd-status" style="margin:0"></span></div>
+    <!-- PINCABOS_AUDIO_HP_UN_PAR_UN_V1 : un bouton par haut-parleur du mode choisi -->
+    <div class="row" style="margin:10px 0 0"><label data-i18n="snd_speakers"></label><div class="seg" id="snd-speakers"></div></div>
+    <div class="hint" id="snd-speakers-hint" style="margin:0"></div>
   </div>
   <div class="card" id="dof-card">
     <div class="row" style="margin-bottom:6px"><label data-i18n="dof_title"></label>
@@ -535,6 +538,7 @@ function renderSound(){
   const hint=document.getElementById("snd-mode-hint");if(hint){hint.textContent=t("sound3d_hint_"+S.sound.sound3d)||t("snd_mode_hint")}
   document.getElementById("snd-vol").value=S.sound.volume;document.getElementById("snd-vol-val").textContent=S.sound.volume+" %";
   document.getElementById("snd-test").disabled=!S.sound.playfield;
+  renderSpeakers();
   document.getElementById("dof-enable").classList.toggle("sel",!!S.dof.enabled);
   document.getElementById("dof-detected").textContent=dofDet.length?t("dof_detected")+" "+dofDet.map(c=>c.kind+(c.serial?" #"+c.serial:"")).join(", ")+(dofDet.some(c=>c.strip)?" — "+t("dof_strip_note"):""):t("dof_none")}
 document.getElementById("snd-out").onchange=e=>{S.sound.playfield=e.target.value;S.sound.touched=true;if(S.sound.backbox===S.sound.playfield)S.sound.backbox="";renderSound()};
@@ -542,6 +546,19 @@ document.getElementById("snd-bg").onchange=e=>{S.sound.backbox=e.target.value;S.
 document.getElementById("snd-mode").onchange=e=>{S.sound.sound3d=e.target.value;S.sound.touched=true;renderSound()};
 document.getElementById("snd-vol").oninput=e=>{S.sound.volume=+e.target.value;S.sound.touched=true;document.getElementById("snd-vol-val").textContent=S.sound.volume+" %"};
 document.getElementById("snd-vol").onchange=e=>{fetch("/api/sound/volume",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({device:S.sound.playfield,volume:S.sound.volume})}).catch(()=>{})};
+const HP_NOMS={FL:"hp_fl",FR:"hp_fr",RL:"hp_rl",RR:"hp_rr",C:"hp_c",LFE:"hp_lfe",SL:"hp_sl",SR:"hp_sr"};
+const HP_ORDRE={2:["FL","FR"],6:["FL","FR","RL","RR","C","LFE"]};
+function canauxPourMode(m){return (String(m)==="0"||String(m)==="1")?2:6}
+function renderSpeakers(){const box=document.getElementById("snd-speakers");box.innerHTML="";
+  const n=canauxPourMode(S.sound.sound3d);
+  HP_ORDRE[n].forEach((hp,i)=>{const b=document.createElement("button");b.type="button";b.className="segb";b.textContent=t(HP_NOMS[hp]);
+    b.disabled=!S.sound.playfield;b.onclick=()=>testSpeaker(i,n,b);box.appendChild(b)});
+  document.getElementById("snd-speakers-hint").textContent=t(n===2?"snd_speakers_hint2":"snd_speakers_hint6")}
+function testSpeaker(i,n,btn){const st=document.getElementById("snd-speakers-hint");
+  document.querySelectorAll("#snd-speakers .segb").forEach(b=>b.disabled=true);st.textContent=t("snd_testing")+" "+btn.textContent;
+  fetch("/api/sound/test-channel",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({device:S.sound.playfield,channels:n,channel:i})})
+  .then(r=>r.json()).then(d=>{st.textContent=(d.ok?t("snd_speaker_ok"):t("snd_test_failed"))+" "+(d.canal||btn.textContent)+(d.ok?"":" — "+(d.sortie||""));st.style.color=d.ok?"var(--good)":"var(--danger)"})
+  .catch(()=>{st.textContent=t("snd_test_failed")}).finally(()=>document.querySelectorAll("#snd-speakers .segb").forEach(b=>b.disabled=!S.sound.playfield))}
 function testSound(){const st=document.getElementById("snd-status"),btn=document.getElementById("snd-test");btn.disabled=true;st.textContent=t("snd_testing");
   fetch("/api/sound/test",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({device:S.sound.playfield})})
   .then(r=>r.json()).then(d=>{btn.disabled=false;st.textContent=d.ok?t("snd_test_ok"):t("snd_test_failed")+" "+(d.sortie||"")})

@@ -147,6 +147,29 @@ def tester(ident: str, run=executer, canaux: int = 2) -> dict:
     return {"ok": rc == 0, "sortie": out.strip()[-300:]}
 
 
+# PINCABOS_AUDIO_HP_UN_PAR_UN_V1 : ordre ALSA des canaux (speaker-test -s est 1-base)
+CANAUX = {2: ["FL", "FR"], 4: ["FL", "FR", "RL", "RR"], 6: ["FL", "FR", "RL", "RR", "C", "LFE"],
+          8: ["FL", "FR", "RL", "RR", "C", "LFE", "SL", "SR"]}
+
+
+def canaux_pour_mode(sound3d: str) -> int:
+    """Nombre de canaux qu'exige le mode VPX : 2 en stereo (0, 1), 6 pour les modes SSF."""
+    return 2 if str(sound3d) in ("0", "1") else 6
+
+
+def tester_canal(ident: str, canaux: int, canal: int, run=executer) -> dict:
+    """Joue la voix « Front Left »… sur UN haut-parleur : speaker-test -c <canaux> -s <canal+1>."""
+    if not HW_RE.match(ident or ""):
+        return {"ok": False, "sortie": "identifiant ALSA invalide"}
+    if canaux not in CANAUX or not 0 <= canal < canaux:
+        return {"ok": False, "sortie": f"canal {canal} hors des {canaux} canaux"}
+    rc, out = run(["speaker-test", "-D", ident, "-c", str(canaux), "-t", "wav", "-s", str(canal + 1), "-l", "1"], timeout=40)
+    sortie = out.strip()[-300:]
+    if rc != 0 and "not available" in sortie.lower():
+        sortie = f"cette sortie n'offre pas {canaux} canaux : {sortie}"
+    return {"ok": rc == 0, "canal": CANAUX[canaux][canal], "sortie": sortie}
+
+
 def volume_alsa(ident: str, pourcent: int, run=executer) -> dict:
     """Volume de la carte (amixer), best effort : premier contrôle utile de la carte."""
     m = HW_RE.match(ident or "")
