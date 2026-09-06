@@ -1,11 +1,11 @@
 {
   "product": "PinCabOS",
-  "version": "Alpha 4.42",
+  "version": "Alpha 4.43",
   "build": "dev",
   "channel": "install",
   "source": "ins.pincabos.cc",
   "created_by": "Karots Sugarpie",
-  "generated_at": "2026-09-06T21:38:18Z",
+  "generated_at": "2026-09-06T22:03:34Z",
   "run03_plymouth_tar_prefix_fix": true,
   "run03_plymouth_tar_prefix_fix_note": "03-install-check.sh normalizes tar entries by removing leading ./ before checking usr/share/plymouth/themes/pincabos.",
   "run03_plymouth_check_fixed_simple": true,
