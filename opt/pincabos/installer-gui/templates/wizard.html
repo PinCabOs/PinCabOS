@@ -551,11 +551,16 @@ document.getElementById("snd-mode").onchange=e=>{S.sound.sound3d=e.target.value;
 document.getElementById("snd-vol").oninput=e=>{S.sound.volume=+e.target.value;S.sound.touched=true;document.getElementById("snd-vol-val").textContent=S.sound.volume+" %"};
 document.getElementById("snd-vol").onchange=e=>{fetch("/api/sound/volume",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({device:S.sound.playfield,volume:S.sound.volume})}).catch(()=>{})};
 const HP_NOMS={FL:"hp_fl",FR:"hp_fr",RL:"hp_rl",RR:"hp_rr",C:"hp_c",LFE:"hp_lfe",SL:"hp_sl",SR:"hp_sr"};
+// PINCABOS_AUDIO_CABLAGE_V1 : le nom du canal ne dit pas ou brancher l'ampli.
+// La place de chaque haut-parleur DANS LE MEUBLE, sous le bouton qui le fait parler.
+const HP_POS={FL:"hp_pos_FL",FR:"hp_pos_FR",RL:"hp_pos_RL",RR:"hp_pos_RR",C:"hp_pos_C",LFE:"hp_pos_LFE",SL:"hp_pos_SL",SR:"hp_pos_SR"};
 const HP_ORDRE={2:["FL","FR"],6:["FL","FR","RL","RR","C","LFE"],8:["FL","FR","RL","RR","C","LFE","SL","SR"]};
 function canauxPourMode(m){const s=String(m);return (s==="0"||s==="1")?2:(s==="4"||s==="5")?8:6}
 function renderSpeakers(){const box=document.getElementById("snd-speakers");box.innerHTML="";
   const n=canauxPourMode(S.sound.sound3d);
   HP_ORDRE[n].forEach((hp,i)=>{const b=document.createElement("button");b.type="button";b.className="segb";b.textContent=t(HP_NOMS[hp]);
+    // PINCABOS_AUDIO_CABLAGE_V1 : en 6 et 8 canaux, la position dans le meuble sous le nom du canal
+    if(n>2){const p=t(HP_POS[hp]);if(p){const s=document.createElement("small");s.style.cssText="display:block;opacity:.7;font-size:11px";s.textContent=p;b.appendChild(s)}}
     b.disabled=!S.sound.playfield;b.onclick=()=>testSpeaker(i,n,b);box.appendChild(b)});
   document.getElementById("snd-speakers-hint").textContent=t(n===2?"snd_speakers_hint2":n===8?"snd_speakers_hint8":"snd_speakers_hint6")}
 function testSpeaker(i,n,btn){const st=document.getElementById("snd-speakers-hint");
