@@ -65,6 +65,21 @@ else
   pco_fail "VPinFE service" "unité absente"
 fi
 
+# PINCABOS_INI_APLATI_V1 : un vpinfe.ini colle sur une seule ligne (page Audio d'avant
+# l'Alpha 4.43) n'est plus lisible : VPinFE le reecrit par defaut et n'affiche plus aucune
+# table. On le detecte et, en reparation, on le reconstruit.
+ini_vpinfe="$PCO_HOME/.config/vpinfe/vpinfe.ini"
+outil_ini="/usr/local/sbin/pincabos-reparer-ini-aplati"
+if [ -f "$ini_vpinfe" ] && awk 'length > 500 && gsub(/\[[A-Za-z]/, "&") > 1 { trouve = 1 } END { exit !trouve }' "$ini_vpinfe"; then
+  if pco_repairing && [ -x "$outil_ini" ] && "$outil_ini" "$ini_vpinfe" --ecrire >/tmp/pincabos-ini-aplati.log 2>&1; then
+    pco_go "VPinFE config" "vpinfe.ini aplati reconstruit (ancien : vpinfe.ini.aplati)"
+  else
+    pco_fail "VPinFE config" "vpinfe.ini aplati : aucune table visible — $outil_ini le reconstruit"
+  fi
+else
+  pco_go "VPinFE config" "vpinfe.ini lisible"
+fi
+
 # PINCABOS_DOCTOR_VPINFE_PORT_8001_V1
 if ss -lnt 2>/dev/null | awk '{print $4}' | grep -Eq '(:|\])8001$'; then
   pco_go "VPinFE port" "8001 en écoute"

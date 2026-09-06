@@ -1,0 +1,226 @@
+#!/usr/bin/env python3
+"""PinCabOS — reconstruit un fichier INI colle sur une seule ligne.
+
+PINCABOS_INI_APLATI_V1
+
+Jusqu'a l'Alpha 4.42, appliquer le routage audio natif depuis la page Audio
+collait tout vpinfe.ini sur une seule ligne (des lignes sans fin de ligne
+jointes par ""). Plus aucune section n'etait lisible : VPinFE reecrivait le
+fichier avec ses valeurs par defaut, tablerootdir devenait vide, et le
+frontend affichait « no tables found ». La cause est corrigee ; cet outil
+repare les cabinets qui ont deja subi l'ecrasement.
+
+La ligne collee contient tout l'ancien fichier : [Section]cle = valeurcle2 = ...
+On la redecoupe en s'appuyant sur la LISTE des cles connues (modele livre,
+sauvegardes du dossier, liste de secours) et jamais sur une regex libre :
+« --force-dark-modedisabledefaultchromeoptions » se couperait au mauvais
+endroit. Controle : tout le texte doit etre consomme, sinon rien n'est ecrit.
+Les valeurs que VPinFE a reecrites apres l'ecrasement ne servent que pour les
+cles absentes de l'ancien fichier.
+
+  pincabos-reparer-ini-aplati <fichier> [--ecrire]
+  pincabos-reparer-ini-aplati --tous [--ecrire]     # les INI connus de PinCabOS
+"""
+import os
+import re
+import sys
+from pathlib import Path
+
+ENTETE = re.compile(r"\[[A-Za-z][A-Za-z0-9_. -]*\]")
+
+
+def ligne_aplatie(ligne: str) -> bool:
+    """Meme critere que pincabos_ini.est_aplati : plusieurs sections ET plusieurs
+    affectations sur une seule ligne. Une valeur qui contient des crochets n'en est pas."""
+    return len(ENTETE.findall(ligne)) > 1 and ligne.count(" = ") > 1
+
+
+CLES_SUP = """bgwindowoverride dmdwindowoverride fulldmdx fulldmdy fulldmdwidth fulldmdheight dmdx dmdy
+dmdwidth dmdheight tablewindowoverride tablescreenid bgscreenid dmdscreenid fulldmdscreenid cabmode
+tableorientation tablerotation vpxbinpath vpxlaunchenv globalinioverride globaltableinioverrideenabled
+globaltableinioverridemask tablerootdir vpxinipath vpxlogdeleteonstart theme startup_collection
+autoupdatemediaonstartup splashscreen muteaudio chromeoptions disabledefaultchromeoptions
+mmhidequitbutton chromeoptionsexclude rartoolpath restorelasttable pagingtype pagingsize level console
+tabletype tableresolution tablevideoresolution defaultmissingmediaimg thumbcachemaxmb tablemediapriority
+bgmediapriority dmdmediapriority realdmdmediapriority last romsupdatesha themeassetsport manageruiport
+enabledof dofconfigtoolapikey enabled pin2dmdenabled pixelcadedevice zedmddevice zedmdwifiaddr deviceip
+deviceport chunksize renamemasktodefaultini renamemasktodefaultinimask synconexit apiendpoint userid
+initials machineid screen_id x y width height geometry updated_at lasttable fulldmd_id dmd_id managed_by
+cabinet_mode playfield_orientation playfield_rotation playfield_name backglass_name fulldmd_name
+fulldmd_x fulldmd_y fulldmd_width fulldmd_height fulldmd_geometry dmd_x dmd_y dmd_width dmd_height
+dmd_geometry""".split()
+
+
+MODELES = (Path("/opt/pincabos/templates/home/.config/vpinfe/vpinfe.ini"),)
+CANDIDATS = (Path("/home/pinball/.config/vpinfe/vpinfe.ini"),)
+
+
+def cles_connues(fichier: Path) -> set:
+    """Les cles du modele livre et des sauvegardes bien formees du meme dossier, plus la liste de base."""
+    cles = set(CLES_SUP)
+    for f in list(MODELES) + sorted(fichier.parent.glob(fichier.name + ".*")) + [fichier]:
+        try:
+            texte = f.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for ligne in texte.splitlines():
+            if len(ligne) > 200:      # une ligne aplatie : pas une source de cles
+                continue
+            m = re.match(r"^([A-Za-z][A-Za-z0-9_.]*)\s*=", ligne)
+            if m:
+                cles.add(m.group(1))
+    # joyleft/keyleft… : deux familles regulieres
+    for base in ("left", "right", "up", "down", "pageup", "pagedown", "select", "menu", "back",
+                 "tutorial", "exit", "collectionmenu"):
+        cles.add("joy" + base)
+        cles.add("key" + base)
+    return cles
+
+
+def decouper(blob: str, cles: set) -> tuple:
+    """[(section, [(cle, valeur)])], reste non consomme."""
+    par_longueur = sorted(cles, key=len, reverse=True)
+    sections, courante, i, n = [], None, 0, len(blob)
+
+    def cle_ici(j):
+        for c in par_longueur:
+            if blob.startswith(c, j):
+                k = j + len(c)
+                m = re.match(r"[ \t]*=[ \t]*", blob[k:])
+                if m:
+                    return c, k + m.end()
+        return None, None
+
+    while i < n:
+        if blob[i] == "[":
+            fin = blob.find("]", i)
+            if fin == -1:
+                break
+            courante = (blob[i + 1:fin], [])
+            sections.append(courante)
+            i = fin + 1
+            continue
+        cle, apres = cle_ici(i)
+        if cle is None:
+            return sections, blob[i:]          # texte non reconnu : on s'arrete
+        j = apres
+        while j < n:
+            if blob[j] == "[" and blob.find("]", j) != -1:
+                break
+            c2, _ = cle_ici(j)
+            if c2 is not None:
+                break
+            j += 1
+        if courante is None:
+            courante = ("Settings", [])
+            sections.append(courante)
+        courante[1].append((cle, blob[apres:j].strip()))
+        i = j
+    return sections, ""
+
+
+def main(argv):
+    ecrire = "--ecrire" in argv
+    if "--tous" in argv:
+        rc = 0
+        for c in CANDIDATS:
+            if not c.is_file():
+                continue
+            texte = c.read_text(encoding="utf-8", errors="replace")
+            if not any(len(l) > 500 and l.count("[") > 1 for l in texte.split("\n")):
+                print(f"GO: {c} n'est pas aplati")
+                continue
+            print(f"--- {c}")
+            rc |= reparer(c, ecrire)
+        return rc
+    args = [a for a in argv[1:] if not a.startswith("--")]
+    if not args:
+        print(__doc__)
+        return 2
+    return reparer(Path(args[0]), ecrire)
+
+
+def reparer(fichier: Path, ecrire: bool) -> int:
+    lignes = fichier.read_text(encoding="utf-8", errors="replace").split("\n")
+    aplaties = [l for l in lignes if ligne_aplatie(l)]
+    if not aplaties:
+        print("NOGO: aucune ligne aplatie dans ce fichier"); return 1
+    blob = max(aplaties, key=len)
+    cles = cles_connues(fichier)
+    sections, reste = decouper(blob, cles)
+    if reste:
+        print(f"NOGO: texte non reconnu a la position {len(blob) - len(reste)} : {reste[:120]!r}")
+        return 1
+
+    # ce que VPinFE a reecrit apres l aplatissement (valeurs par defaut) : on le
+    # garde uniquement pour les cles que l ancien fichier n avait pas.
+    reste_texte = "\n".join(l for l in lignes if l is not blob)
+    apres, sec = {}, None
+    for ligne in reste_texte.splitlines():
+        ligne = ligne.strip()
+        if ligne.startswith("[") and ligne.endswith("]"):
+            sec = ligne[1:-1]
+        elif sec and "=" in ligne and not ligne.startswith((";", "#")):
+            c, v = ligne.split("=", 1)
+            apres[(sec, c.strip())] = v.strip()
+
+    # Sections homonymes fusionnees, DERNIERE valeur gagnante : c'est ce que voit
+    # un lecteur d'ini (le fichier avait trois [Settings] a la suite des ecritures).
+    fusion, index, vus = [], {}, set()
+    for nom, paires in sections:
+        if nom not in index:
+            index[nom] = []
+            fusion.append((nom, index[nom]))
+        for cle, valeur in paires:
+            rang = next((i for i, (c, _) in enumerate(index[nom]) if c == cle), None)
+            if rang is None:
+                index[nom].append((cle, valeur))
+            else:
+                index[nom][rang] = (cle, valeur)
+            vus.add((nom, cle))
+    fusion = [(nom, paires) for nom, paires in fusion if paires]
+    index = {nom: paires for nom, paires in fusion}
+    ajouts = 0
+    for (nom, cle), valeur in apres.items():
+        if (nom, cle) in vus:
+            continue
+        if nom not in index:
+            index[nom] = []
+            fusion.append((nom, index[nom]))
+        index[nom].append((cle, valeur))
+        vus.add((nom, cle))
+        ajouts += 1
+
+    sortie = []
+    for nom, paires in fusion:
+        sortie.append(f"[{nom}]")
+        sortie += [f"{c} = {v}" for c, v in paires]
+        sortie.append("")
+    texte = "\n".join(sortie).rstrip("\n") + "\n"
+
+    print(f"{len(fusion)} sections, {sum(len(p) for _, p in fusion)} clés "
+          f"({ajouts} venues de la réécriture de VPinFE), {len(texte)} octets")
+    for cle in ("tablerootdir", "vpxbinpath", "vpxinipath", "theme", "muteaudio", "enabledof"):
+        for nom, paires in fusion:
+            for c, v in paires:
+                if c == cle:
+                    print(f"  [{nom}] {c} = {v}")
+    if not ecrire:
+        print("--- essai a blanc ; --ecrire pour appliquer")
+        Path("/tmp/vpinfe.ini.reconstruit").write_text(texte, encoding="utf-8")
+        print("apercu : /tmp/vpinfe.ini.reconstruit")
+        return 0
+    secours = fichier.with_name(fichier.name + ".aplati")
+    secours.write_bytes(fichier.read_bytes())
+    fichier.write_text(texte, encoding="utf-8")
+    print(f"écrit ; ancien fichier conservé : {secours}")
+    try:
+        st = fichier.parent.stat()
+        os.chown(fichier, st.st_uid, st.st_gid)
+    except OSError:
+        pass
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
