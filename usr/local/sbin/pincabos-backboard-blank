@@ -10,7 +10,11 @@ tampon) puis « O » (sortie) — le protocole du TeensyStripController de DOF,
 que libdof emploie aussi — sur le port declare dans cabinet.xml, a defaut le
 premier Teensy serie. Sans backboard : sortie immediate, sans effet.
 
-  pincabos-backboard-blank [boot|shutdown]
+  pincabos-backboard-blank [boot|shutdown|table]
+
+PINCABOS_BACKBOARD_RETOUR_V1 : « table » est la sortie d'une partie, appelee par
+le lanceur des que VPX rend la main (le mur restait fige sur les effets de la
+table jusqu'au prochain evenement du frontend).
 """
 from __future__ import annotations
 

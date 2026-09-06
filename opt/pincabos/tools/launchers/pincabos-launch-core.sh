@@ -417,6 +417,21 @@ if [[ "$MODE" == "hybrid" ]]; then
     fi
 fi
 
+# PINCABOS_BACKBOARD_RETOUR_V1
+#
+# A la sortie d'une table, le TeensyStripController garde la derniere image que
+# DOF lui a envoyee : le backboard HD reste fige sur les effets de la table
+# jusqu'au prochain evenement du frontend, soit dix secondes d'attente, soit
+# jusqu'a ce que le joueur change de table. On efface le mur des que VPX rend la
+# main ; VPinFE reprend ensuite avec le logo animé de la table survolee (les
+# evenements DOF de son menu). Sans backboard, sans outil, ou si le port est
+# deja repris : rien, jamais d'erreur, jamais de blocage.
+eteindre_backboard() {
+    local outil=/usr/local/sbin/pincabos-backboard-blank
+    [[ -x "$outil" ]] || return 0
+    "$outil" table >> "$LOG" 2>&1 || true
+}
+
 case "$SELECTED_MODE" in
     original)
         # =====================================================
@@ -493,6 +508,7 @@ case "$SELECTED_MODE" in
 
         set -e
 
+        eteindre_backboard
         restore_pup
         trap - EXIT INT TERM HUP
         reveiller_frontend
@@ -531,10 +547,20 @@ case "$SELECTED_MODE" in
 
         log "PUP [▶] Lancement PUPPack direct."
 
-        exec env \
+        # PINCABOS_BACKBOARD_RETOUR_V1 : ce mode partait en `exec`, donc rien ne
+        # s'executait au retour de la table. Le lanceur attend maintenant la fin
+        # de VPX, efface le mur et rend son code de sortie, comme le mode Original.
+        set +e
+        env \
             PINCABOS_GAME_CHOICE=pup \
             PINCABOS_PUP_ENABLED=1 \
             "$REAL_LAUNCHER" "${FILTERED_ARGS[@]}"
+        RC=$?
+        set -e
+
+        eteindre_backboard
+
+        exit "$RC"
         ;;
     *)
         log "NOGO [X] Mode final invalide : $SELECTED_MODE"
