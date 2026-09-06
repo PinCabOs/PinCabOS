@@ -509,5 +509,61 @@ class Integration(unittest.TestCase):
                 self.assertIn(k, keys, f"{lang}: {k}")
 
 
+class PlanDeCablage(unittest.TestCase):
+    """PINCABOS_AUDIO_CABLAGE_V1 — l'assistant doit dire ou brancher chaque ampli, et le dire juste.
+
+    Cab de Yann, 07/09/2026 : l'aide du mode 7.1 annoncait « lateraux = lockbar,
+    arriere = fond du cab » dans les cinq langues. C'est l'inverse de ce que fait
+    VPX (sa propre documentation : « 6ch Side & Rear at lockbar », l'avant portant
+    le haut de table donc le fronton) et l'ecoute l'a confirme : les flips
+    sortaient au fond du meuble. Les vibrants de la lockbar vont sur l'ARRIERE.
+    """
+
+    LANGUES = ("fr", "en", "de", "it", "es")
+    CANAUX = ("FL", "FR", "RL", "RR", "SL", "SR", "C", "LFE")
+
+    def setUp(self):
+        self.i18n = json.loads((R / "opt/pincabos/installer-gui/i18n.json").read_text(encoding="utf-8"))
+
+    def test_position_de_chaque_haut_parleur_dans_les_cinq_langues(self):
+        for langue in self.LANGUES:
+            for canal in self.CANAUX:
+                cle = f"hp_pos_{canal}"
+                self.assertIn(cle, self.i18n[langue], f"{langue}/{cle}")
+                self.assertTrue(self.i18n[langue][cle].strip(), f"{langue}/{cle} vide")
+
+    def test_la_lockbar_est_a_l_arriere_pas_sur_les_lateraux(self):
+        mots = {"fr": "lockbar", "en": "lockbar", "de": "Lockbar", "it": "lockbar", "es": "lockbar"}
+        for langue in self.LANGUES:
+            lockbar = mots[langue].lower()
+            self.assertIn(lockbar, self.i18n[langue]["hp_pos_RL"].lower(), f"{langue} : arriere = lockbar")
+            self.assertIn(lockbar, self.i18n[langue]["hp_pos_RR"].lower(), langue)
+            self.assertNotIn(lockbar, self.i18n[langue]["hp_pos_SL"].lower(), f"{langue} : lateral != lockbar")
+            self.assertNotIn(lockbar, self.i18n[langue]["hp_pos_SR"].lower(), langue)
+
+    def test_l_aide_du_mode_7_1_ne_dit_plus_l_inverse(self):
+        for langue in self.LANGUES:
+            texte = self.i18n[langue]["snd_speakers_hint8"]
+            self.assertGreater(len(texte), 120, langue)
+            for fautif in ("side = lockbar", "latéraux = lockbar", "seitlich = Lockbar",
+                           "laterali = lockbar", "laterales = lockbar"):
+                self.assertNotIn(fautif, texte, f"{langue} : {fautif}")
+
+    def test_le_wizard_affiche_la_position_sous_le_bouton(self):
+        w = (R / "opt/pincabos/installer-gui/templates/wizard.html").read_text(encoding="utf-8")
+        self.assertIn("PINCABOS_AUDIO_CABLAGE_V1", w)
+        self.assertIn('const HP_POS={FL:"hp_pos_FL"', w)
+        # la legende n'apparait qu'au-dela de la stereo, ou la question ne se pose pas
+        self.assertIn("if(n>2){const p=t(HP_POS[hp]);", w)
+        self.assertLess(w.index("const HP_POS="), w.index("function renderSpeakers"))
+
+    def test_les_modes_disent_ou_part_le_bas_de_table(self):
+        for langue in ("fr", "en"):
+            for cle in ("sound3d_hint_4", "sound3d_hint_5"):
+                texte = self.i18n[langue][cle].lower()
+                self.assertIn("lockbar", texte, f"{langue}/{cle}")
+                self.assertTrue("arrière" in texte or "rear" in texte, f"{langue}/{cle}")
+
+
 if __name__ == "__main__":
     unittest.main()
