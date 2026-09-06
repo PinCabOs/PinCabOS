@@ -165,6 +165,8 @@ add_ignore "**/*.old"
 add_ignore "**/*.bundle"
 
 add_ignore "/home/pinball/vpinfe.pre-*/"
+add_ignore "/opt/pinball/"
+add_ignore "/home/pinball/*.avant-opt*"
 add_ignore "/home/pinball/pincabos-*-20*/"
 add_ignore "/root/pincabos-final-safety-*/"
 add_ignore "/root/pincabos-merge-preview-*/"

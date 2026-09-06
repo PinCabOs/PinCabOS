@@ -11,11 +11,12 @@ PINBALL_USER="$PCO_USER"
 PINBALL_HOME="$PCO_HOME"
 
 # PINCABOS_VPX_STABLE_SYMLINK_V1
-# /home/pinball/vpx pointe vers le dossier moteur versionné. Auto-répare :
-# si le lien manque ou est cassé, cible le dossier VPinballX_BGFX-* le plus récent.
+# $PCO_VPX_LINK (/opt/pinball/vpx) pointe vers le dossier moteur versionné.
+# Auto-répare : si le lien manque ou est cassé, cible le dossier
+# VPinballX_BGFX-* le plus récent du même emplacement (PINCABOS_RUNTIMES_OPT_V1).
 VPX_HOME_LINK="$PCO_VPX_LINK"
 if [[ ! -e "${VPX_HOME_LINK}/VPinballX_BGFX" ]]; then
-  _newest="$(ls -dt "$PINBALL_HOME"/VPinballX_BGFX-*-linux-x64 2>/dev/null | head -1 || true)"
+  _newest="$(ls -dt "$(dirname "$VPX_HOME_LINK")"/VPinballX_BGFX-*-linux-x64 2>/dev/null | head -1 || true)"
   if [[ -n "${_newest}" ]]; then
     ln -sfn "${_newest}" "${VPX_HOME_LINK}"
     chown -h "$PINBALL_USER:$PINBALL_USER" "${VPX_HOME_LINK}" 2>/dev/null || true

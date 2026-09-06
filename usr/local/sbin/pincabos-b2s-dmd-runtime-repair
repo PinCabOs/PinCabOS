@@ -66,10 +66,12 @@ add_candidate() {
 }
 
 PLUGIN_CANDIDATES=()
-add_candidate "/home/pinball/VPinballX_BGFX-10.8.1-5231-7ca174632-linux-x64/plugins/b2slegacy/plugin-b2slegacy.so"
+HOME_PINBALL="/home/pinball"
+add_candidate "$HOME_PINBALL/VPinballX_BGFX-10.8.1-5231-7ca174632-linux-x64/plugins/b2slegacy/plugin-b2slegacy.so"
 
 shopt -s nullglob
-for root in /home/pinball/VPinballX_BGFX-* /home/pinball/VPinballX-* /home/pinball/vpinball-*; do
+# PINCABOS_RUNTIMES_OPT_V1 : /opt/pinball d'abord, le compte du joueur pour un cabinet pas encore migre
+for root in /opt/pinball/vpx /opt/pinball/VPinballX_BGFX-* "$HOME_PINBALL"/VPinballX_BGFX-* "$HOME_PINBALL"/VPinballX-* "$HOME_PINBALL"/vpinball-*; do
     [[ -d "$root" ]] || continue
     add_candidate "$root/plugins/b2slegacy/plugin-b2slegacy.so"
 done

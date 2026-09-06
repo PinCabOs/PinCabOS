@@ -23,6 +23,18 @@ from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any, Iterable
 
+
+def _pco_chemin(cle, defaut):
+    """PINCABOS_RUNTIMES_OPT_V1 : chemin de pincabos_paths (source de verite), sinon la valeur livree."""
+    try:
+        import sys as _sys
+        if "/opt/pincabos/tools" not in _sys.path:
+            _sys.path.insert(0, "/opt/pincabos/tools")
+        from pincabos_paths import PATHS as _pco
+        return getattr(_pco, cle)
+    except Exception:  # hors cab (tests, banc)
+        return defaut
+
 SCRIPT_VERSION = "PINCABOS_VPSDB_GLOBAL_MAP_V2"
 
 NAS = Path("/home/pinball/NetworkDrives/192-168-254-253")
@@ -51,7 +63,7 @@ RUNTIME_USER = os.environ.get("PINCABOS_VPX_USER", "pinball")
 ONLY_TABLE = os.environ.get("PINCABOS_MAP_ONLY", "").strip()
 
 VPX_CANDIDATES = (
-    Path("/home/pinball/vpx/VPinballX_BGFX"),
+    Path(_pco_chemin("vpx_bin", "/opt/pinball/vpx/VPinballX_BGFX")),
     Path("/opt/pincabos/apps/vpinball/VPinballX_BGFX"),
     Path("/opt/pincabos/apps/vpinball/VPinballX"),
     Path("/opt/pincabos/bin/VPinballX_BGFX"),

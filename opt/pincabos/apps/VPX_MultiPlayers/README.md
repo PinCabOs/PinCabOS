@@ -38,7 +38,7 @@ puis active seulement le nouvel agent.
 
 ```bash
 sudo bash /opt/pincabos/apps/VPX_MultiPlayers/install.sh \
-  /home/pinball/VPinballX_BGFX-10.8.1-5436-af26b2d93-linux-x64
+  /opt/pinball/VPinballX_BGFX-10.8.1-5436-af26b2d93-linux-x64
 ```
 
 Après installation :

@@ -15,6 +15,18 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import quote
 
+
+def _pco_chemin(cle, defaut):
+    """PINCABOS_RUNTIMES_OPT_V1 : chemin de pincabos_paths (source de verite), sinon la valeur livree."""
+    try:
+        import sys as _sys
+        if "/opt/pincabos/tools" not in _sys.path:
+            _sys.path.insert(0, "/opt/pincabos/tools")
+        from pincabos_paths import PATHS as _pco
+        return getattr(_pco, cle)
+    except Exception:  # hors cab (tests, banc)
+        return defaut
+
 MARKER = "PCO-DASHBOARD-LOBBY-V13"
 WEB_ROOT = Path("/opt/pincabos/web")
 STATIC_ROOT = WEB_ROOT / "static"
@@ -2395,7 +2407,7 @@ def realtime_clock(item):
 _VPINFE_STATUS_CACHE = {"at": 0.0, "signature": None, "remote_at": 0.0, "value": {}}
 _VPINFE_STATUS_SCRIPT = Path("/opt/pincabos/tools/vpinfeupdate.py")
 _VPINFE_STATUS_STATE = Path("/opt/pincabos/state/vpinfe-update-state.json")
-_VPINFE_STATUS_BIN = Path("/home/pinball/vpinfe/vpinfe")
+_VPINFE_STATUS_BIN = Path(_pco_chemin("vpinfe_bin", "/opt/pinball/vpinfe/vpinfe"))
 
 
 def vpinfe_update_info():

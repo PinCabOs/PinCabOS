@@ -15,7 +15,7 @@ class Defauts(unittest.TestCase):
     def test_la_realite_d_un_cabinet(self):
         d = pp.defaults("pinball")
         self.assertEqual(d["tables"], "/home/pinball/Tables")
-        self.assertEqual(d["vpx_bin"], "/home/pinball/vpx/VPinballX_BGFX")
+        self.assertEqual(d["vpx_bin"], "/opt/pinball/vpx/VPinballX_BGFX")
         self.assertEqual(d["vpx_ini"], "/home/pinball/.pincabos/vpx/VPinballX.ini")
         self.assertEqual(d["vpx_legacy_pref"], "/home/pinball/.local/share/VPinballX/10.8")
         self.assertEqual(d["vpinfe_ini"], "/home/pinball/.config/vpinfe/vpinfe.ini")
@@ -63,7 +63,7 @@ class Chargement(unittest.TestCase):
         v = pp.load(p)
         self.assertEqual(v["tables"], "/mnt/pincabos/tables")
         self.assertEqual(v["display"], ":1")
-        self.assertEqual(v["vpx_bin"], "/home/pinball/vpx/VPinballX_BGFX")
+        self.assertEqual(v["vpx_bin"], "/opt/pinball/vpx/VPinballX_BGFX")
 
     def test_valeur_vide_ignoree(self):
         p = self.ecrire({"schema": "pincabos.paths/2", "paths": {"tables": ""}})

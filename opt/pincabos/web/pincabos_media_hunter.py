@@ -24,6 +24,18 @@ from typing import Any
 from flask import jsonify, request
 
 
+def _pco_chemin(cle, defaut):
+    """PINCABOS_RUNTIMES_OPT_V1 : chemin de pincabos_paths (source de verite), sinon la valeur livree."""
+    try:
+        import sys as _sys
+        if "/opt/pincabos/tools" not in _sys.path:
+            _sys.path.insert(0, "/opt/pincabos/tools")
+        from pincabos_paths import PATHS as _pco
+        return getattr(_pco, cle)
+    except Exception:  # hors cab (tests, banc)
+        return defaut
+
+
 VERSION = "1.2.5"
 CONFIG_PATH = Path("/opt/pincabos/config/media-hunter/sources.json")
 CREDENTIALS_DIR = CONFIG_PATH.parent / "credentials"
@@ -649,14 +661,14 @@ def _media_specs_for_settings(settings: dict[str, str]) -> dict[str, dict[str, A
 def _find_vpsdb() -> Path | None:
     candidates = [
         Path("/home/pinball/.config/vpinfe/vpsdb.json"),
-        Path("/home/pinball/vpinfe/resources/vpsdb.json"),
+        Path(_pco_chemin("vpinfe_dir", "/opt/pinball/vpinfe")) / "resources/vpsdb.json",
         Path("/opt/pincabos/config/vpsdb.json"),
         Path("/opt/pincabos/web/vpsdb.json"),
     ]
     for candidate in candidates:
         if candidate.is_file():
             return candidate
-    for base in (Path("/home/pinball/.config/vpinfe"), Path("/home/pinball/vpinfe"), Path("/opt/pincabos")):
+    for base in (Path("/home/pinball/.config/vpinfe"), Path(_pco_chemin("vpinfe_dir", "/opt/pinball/vpinfe")), Path("/opt/pincabos")):
         if not base.exists():
             continue
         try:

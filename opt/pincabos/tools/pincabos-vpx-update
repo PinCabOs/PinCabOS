@@ -14,8 +14,9 @@ modele de l'updater vpxtool/VPinFE :
   * l'install telecharge l'asset, l'extrait, et bascule ~/vpx par ln atomique.
     L'ancienne version est conservee pour le rollback.
 
-Tout tourne en compte pinball : ~/vpx et les dossiers VPinballX_BGFX-* sont dans
-son home. Les preferences VPX sont decouplees (PrefPath), donc preservees.
+Tout tourne en compte pinball : le lien vpx et les dossiers VPinballX_BGFX-*
+sont sous /opt/pinball (PINCABOS_RUNTIMES_OPT_V1, propriete du joueur). Les
+preferences VPX sont decouplees (PrefPath), donc preservees.
 
   pincabos-vpx-update --status | --check | --install | --rollback
 """
@@ -33,8 +34,20 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
-HOME = Path("/home/pinball")
-LIEN = HOME / "vpx"
+
+def _pco_chemin(cle, defaut):
+    """PINCABOS_RUNTIMES_OPT_V1 : chemin de pincabos_paths (source de verite), sinon la valeur livree."""
+    try:
+        import sys as _sys
+        if "/opt/pincabos/tools" not in _sys.path:
+            _sys.path.insert(0, "/opt/pincabos/tools")
+        from pincabos_paths import PATHS as _pco
+        return getattr(_pco, cle)
+    except Exception:  # hors cab (tests, banc)
+        return defaut
+
+LIEN = Path(_pco_chemin("vpx_link", "/opt/pinball/vpx"))
+RUNTIMES = LIEN.parent
 LOCK = Path("/run/lock/pincabos-vpx-update.lock")
 API = "https://api.github.com/repos/vpinball/vpinball/releases?per_page=20"
 PREFIXE = "VPinballX_BGFX-"
@@ -94,7 +107,7 @@ def etat() -> dict:
 
 def _dossiers_version() -> list[Path]:
     return sorted(
-        (p for p in HOME.iterdir()
+        (p for p in RUNTIMES.iterdir()
          if p.is_dir() and not p.is_symlink()
          and p.name.startswith(PREFIXE) and (p / "VPinballX_BGFX").is_file()),
         key=lambda p: p.stat().st_mtime,
@@ -102,10 +115,10 @@ def _dossiers_version() -> list[Path]:
 
 
 def _basculer(dossier: Path) -> None:
-    tmp = HOME / ".vpx.new"
+    tmp = RUNTIMES / ".vpx.new"
     if tmp.is_symlink() or tmp.exists():
         tmp.unlink()
-    tmp.symlink_to(dossier.name)  # lien relatif dans le home
+    tmp.symlink_to(dossier.name)  # lien relatif, a cote des bundles
     os.replace(tmp, LIEN)
 
 
@@ -124,11 +137,11 @@ def installer() -> int:
         print(f"VPX-BGFX {version} deja installe")
         return 0
 
-    cible = HOME / f"VPinballX_BGFX-{version}-linux-x64"
+    cible = RUNTIMES / f"VPinballX_BGFX-{version}-linux-x64"
 
     if not (cible / "VPinballX_BGFX").is_file():
         print(f"telechargement de VPX-BGFX {version} ({(taille or 0)//(1<<20)} Mo)...")
-        with tempfile.TemporaryDirectory(dir=str(HOME), prefix=".vpx-dl-") as tmp:
+        with tempfile.TemporaryDirectory(dir=str(RUNTIMES), prefix=".vpx-dl-") as tmp:
             archive = Path(tmp) / "vpx.tar.gz"
             with urllib.request.urlopen(_req(url), timeout=600) as r, \
                     archive.open("wb") as f:

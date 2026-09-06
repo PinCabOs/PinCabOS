@@ -28,6 +28,14 @@ from datetime import datetime
 from pathlib import Path
 from typing import Mapping, Sequence
 
+# PINCABOS_RUNTIMES_OPT_V1 : VPX et VPinFE vivent sous /opt/pinball (pincabos_paths,
+# source de verite ; un cabinet pas encore migre y est ramene a son compte).
+try:
+    from pincabos_paths import PATHS as _PCO_PATHS
+    _PCO_VPX_LINK, _PCO_VPINFE_DIR = _PCO_PATHS.vpx_link, _PCO_PATHS.vpinfe_dir
+except Exception:  # hors cab (tests, banc)
+    _PCO_VPX_LINK, _PCO_VPINFE_DIR = "/opt/pinball/vpx", "/opt/pinball/vpinfe"
+
 
 @dataclass(frozen=True)
 class PinCabOSPaths:
@@ -89,7 +97,7 @@ class PinCabOSPaths:
     # VPX / VPinball officiel
     @property
     def vpx_dir(self) -> Path:
-        return Path('/home/pinball/vpx')
+        return Path(_PCO_VPX_LINK)
 
     @property
     def vpx_compat_dir(self) -> Path:
@@ -122,7 +130,7 @@ class PinCabOSPaths:
     # VPinFE officiel
     @property
     def vpinfe_root(self) -> Path:
-        return Path('/home/pinball/vpinfe')
+        return Path(_PCO_VPINFE_DIR)
 
     @property
     def vpinfe_current(self) -> Path:

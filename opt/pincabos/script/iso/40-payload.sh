@@ -285,6 +285,7 @@ tar \
   --exclude='./home/pinball/Backups/*' \
   --exclude='./home/pinball/pincabos-*' \
   --exclude='./home/pinball/vpinfe.pre-*' \
+  --exclude='./home/pinball/*.avant-opt*' \
   --exclude='./home/pinball/Downloads/*' \
   --exclude='./home/pinball/.cache' \
   --exclude='./home/pinball/.cache/*' \

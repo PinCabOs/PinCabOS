@@ -1790,8 +1790,7 @@ def _tools_ini_page_html_legacy_v1(title, subtitle, profile, ini_path):
     path_suggestions = {
         "vpxbinpath": [
             "/opt/pincabos/bin/vpx-vpinfe-default.sh",
-            "/home/pinball/vpx/VPinballX_BGFX",
-            "/home/pinball/vpx/VPinballX_BGFX",
+            "/opt/pinball/vpx/VPinballX_BGFX",
         ],
         "vpxinipath": [
             "/home/pinball/.local/share/VPinballX/10.8/VPinballX.ini",

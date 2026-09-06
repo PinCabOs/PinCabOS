@@ -11,7 +11,7 @@ from . import AGENT_VERSION, PROTOCOL_VERSION
 DEFAULT_PROTECTED_PATHS = (
     Path("/opt/pincabos/apps/vpinball/current/VPinballX-BGFX"),
     Path("/opt/pincabos/bin/vpx.sh"),
-    Path("/home/pinball/vpinfe/vpinfe"),
+    Path("/opt/pinball/vpinfe/vpinfe"),
     Path("/home/pinball/.vpinball/VPinballX.ini"),
     Path("/home/pinball/.local/share/VPinballX/10.8/VPinballX.ini"),
 )

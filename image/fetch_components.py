@@ -3,8 +3,9 @@
 
 Le rootfs de l'ISO ne porte plus les bundles VPX et VPinFE copiés d'un cab :
 ils sont téléchargés depuis les releases officielles, version épinglée et
-somme SHA-256 vérifiée (image/components.json), puis posés dans le compte du
-joueur du rootfs. libdof patché (backboard, Dude's Cab) vient du dépôt
+somme SHA-256 vérifiée (image/components.json), puis posés sous /opt/pinball
+dans le rootfs (PINCABOS_RUNTIMES_OPT_V1 ; le compte du joueur garde les liens
+de compatibilité ~/vpx et ~/vpinfe). libdof patché (backboard, Dude's Cab) vient du dépôt
 (overlays/libdof-canonical) et remplace la copie vendored des deux bundles,
 comme sur les cabs. Les modèles du compte (vpinfe.ini, DOF, tableau de bord)
 suivent via pincabos_home_templates.py.
@@ -73,7 +74,8 @@ def extraire(archive: Path, dest: Path) -> Path:
     """Extrait dans `dest` (vidé d'abord). Un dossier racine unique est aplati."""
     if dest.exists():
         shutil.rmtree(dest)
-    dest.mkdir(parents=True)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.mkdir()
     with tempfile.TemporaryDirectory(dir=dest.parent) as tmp:
         tmp = Path(tmp)
         if archive.name.endswith((".tar.gz", ".tgz", ".tar.xz", ".tar")):
@@ -182,6 +184,14 @@ def appliquer(rootfs: Path, cache: Path = CACHE, only=None, dry_run=False, compo
     d = composants or charger()
     depot = depot or ICI.parent
     journal = []
+    # PINCABOS_RUNTIMES_OPT_V1 : /opt/pinball appartient au joueur (les updaters
+    # VPX et VPinFE y ecrivent en son nom), comme sur un cabinet migre.
+    runtimes = rootfs / d.get("runtimes_dir", "opt/pinball")
+    if not dry_run:
+        runtimes.mkdir(parents=True, exist_ok=True)
+        if os.geteuid() == 0:
+            os.chown(runtimes, UID, GID)
+    journal.append(f"GO: runtimes sous {d.get('runtimes_dir', 'opt/pinball')}")
     for nom, comp in d["components"].items():
         if only and nom not in only:
             continue

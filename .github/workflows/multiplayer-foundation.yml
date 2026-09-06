@@ -66,7 +66,7 @@ jobs:
 
       - name: Prove the LAB cannot launch private VPX or VPinFE paths
         run: |
-          if grep -RInE '/home/pinball/(vpinfe|\.vpinball|\.local/share/VPinballX)|/opt/pincabos/apps/vpinball' \
+          if grep -RInE '/home/pinball/(vpinfe|vpx|\.vpinball|\.local/share/VPinballX)|/opt/pinball/|/opt/pincabos/apps/vpinball' \
             opt/pincabos/apps/VPX_MultiPlayers/pincabos_multiplayer \
             opt/pincabos/apps/VPX_MultiPlayers/bin \
             opt/pincabos/web/pincaboslink_multiplayer.py; then

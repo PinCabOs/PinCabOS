@@ -1,5 +1,7 @@
 pco_section "VPX / PINMAME"
 
+. /opt/pincabos/tools/pincabos-paths.sh
+
 vpx_launcher=""
 for candidate in /opt/pincabos/bin/vpx.sh /opt/pincabos/scripts/VPXlauncher.sh; do
   if [ -x "$candidate" ]; then
@@ -16,7 +18,9 @@ fi
 
 vpx_bin=""
 for candidate in \
-  /home/pinball/VPinballX_BGFX-*/VPinballX_BGFX \
+  "$PCO_VPX_BIN" \
+  "$PCO_RUNTIMES"/VPinballX_BGFX-*/VPinballX_BGFX \
+  "$PCO_HOME"/VPinballX_BGFX-*/VPinballX_BGFX \
   /opt/pincabos/apps/vpinball/*/VPinballX_BGFX \
   /opt/pincabos/apps/vpinball/*/VPinballX
  do
@@ -58,7 +62,7 @@ else
   pco_warn "VPX INI" "aucun fichier INI attendu"
 fi
 
-pinmame="$(find /home/pinball /opt/pincabos -xdev -type f \
+pinmame="$(find "$PCO_RUNTIMES" "$PCO_HOME" /opt/pincabos -xdev -type f \
   \( -name 'libpinmame.so*' -o -name 'pinmame' \) \
   -print -quit 2>/dev/null || true)"
 if [ -n "$pinmame" ]; then

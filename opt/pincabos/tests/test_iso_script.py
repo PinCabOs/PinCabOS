@@ -163,16 +163,20 @@ class FichiersVivants(unittest.TestCase):
 
 
 class LienVpx(unittest.TestCase):
-    """PINCABOS_VPX_LINK_V1 : ~/vpx existe sur la cible et a l execution."""
+    """PINCABOS_VPX_LINK_V1 : le lien vpx existe sur la cible et a l execution
+    (sous /opt/pinball depuis PINCABOS_RUNTIMES_OPT_V1)."""
 
     def test_cible_et_filet(self):
         s = texte_installateur()
         self.assertIn("ensure_target_vpx_link() {", s)
         self.assertLess(s.index("  ensure_target_vpx_link\n"), s.index("  apply_target_identity\n"))
+        self.assertIn('local h="$TARGET/opt/pinball"', s)
         self.assertIn('ln -sfn "$(basename "$plus_recent")" "$h/vpx"', s)
+        self.assertIn('bash "$migrateur" --racine "$TARGET" --uid 1000 --gid 1000', s)
+        self.assertIn('test -x "$TARGET/opt/pinball/vpinfe/vpinfe"', s)
         p = Path(RACINE, "opt/pincabos/tools/pincabos-paths.sh").read_text(encoding="utf-8")
         self.assertIn("PINCABOS_VPX_LINK_V1", p)
-        self.assertIn('ln -sfn "$(basename "$_pco_vpx_dir")" /home/pinball/vpx', p)
+        self.assertIn('ln -sfn "$(basename "$_pco_vpx_dir")" "$PCO_VPX_LINK"', p)
 
 
 

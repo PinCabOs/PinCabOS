@@ -1219,19 +1219,29 @@ PY
 }
 
 ensure_target_vpx_link() {
-    # PINCABOS_VPX_LINK_V1 : toute la chaine de lancement passe par /home/pinball/vpx
+    # PINCABOS_VPX_LINK_V1 : toute la chaine de lancement passe par le lien vpx
     # (pincabos-paths.sh). Une image sans ce lien (vu le 05/09 : bundle 5231 nu)
     # installe un cab qui ne lance aucune table. On pointe le bundle le plus recent.
-    local h="$TARGET/home/pinball" plus_recent
-    [ -d "$h" ] || return 0
+    # PINCABOS_RUNTIMES_OPT_V1 : les runtimes vivent sous /opt/pinball ; un payload
+    # pris sur un cabinet pas encore migre les a dans le compte du joueur, le
+    # script de migration livre les y amene et pose les liens de compatibilite.
+    local h="$TARGET/opt/pinball" plus_recent migrateur="$TARGET/usr/local/sbin/pincabos-runtimes-opt"
+    if [ -x "$migrateur" ]; then
+        if bash "$migrateur" --racine "$TARGET" --uid 1000 --gid 1000; then
+            pco_go "runtimes VPX et VPinFE sous /opt/pinball"
+        else
+            pco_warn "pincabos-runtimes-opt failed on target"
+        fi
+    fi
+    [ -d "$h" ] || { pco_warn "no /opt/pinball in the image"; return 0; }
     if [ ! -e "$h/vpx" ] || [ ! -x "$h/vpx/VPinballX_BGFX" ]; then
         plus_recent="$(ls -d "$h"/VPinballX_BGFX-*/ 2>/dev/null | sort -V | tail -1)"
         if [ -n "$plus_recent" ]; then
             ln -sfn "$(basename "$plus_recent")" "$h/vpx"
             chown -h 1000:1000 "$h/vpx" 2>/dev/null || true
-            pco_go "VPX link created: ~/vpx -> $(basename "$plus_recent")"
+            pco_go "VPX link created: /opt/pinball/vpx -> $(basename "$plus_recent")"
         else
-            pco_warn "no VPinballX_BGFX bundle in the image: ~/vpx not created"
+            pco_warn "no VPinballX_BGFX bundle in the image: /opt/pinball/vpx not created"
         fi
     fi
 }
@@ -1926,7 +1936,7 @@ install_payload() {
 
   test -f "$TARGET/etc/pincabos/orientation.conf"
   test -d "$TARGET/opt/pincabos"
-  test -d "$TARGET/home/pinball/vpinfe"
+  test -x "$TARGET/opt/pinball/vpinfe/vpinfe"
   ls "$TARGET"/boot/vmlinuz-* >/dev/null
   ls "$TARGET"/boot/initrd.img-* >/dev/null
 

@@ -662,9 +662,16 @@ if [ -f "$TARGET/opt/pincabos/tools/run-vpinfe-systemd.sh" ]; then
   chmod 755 "$TARGET/opt/pincabos/tools/run-vpinfe-systemd.sh" || true
 fi
 
-if [ -d "$TARGET/home/pinball/vpinfe" ]; then
-  chown -R "$PINBALL_UID:$PINBALL_GID" "$TARGET/home/pinball/vpinfe" || true
-  find "$TARGET/home/pinball/vpinfe" -maxdepth 2 -type f -iname '*vpinfe*' -exec chmod 755 {} \; 2>/dev/null || true
+# PINCABOS_RUNTIMES_OPT_V1 : VPinFE sous /opt/pinball ; le compte du joueur
+# pour un payload pris sur un cabinet pas encore migre (l'installateur migre ensuite).
+for vpinfe_dir in "$TARGET/opt/pinball/vpinfe" "$TARGET/home/pinball/vpinfe"; do
+  if [ -d "$vpinfe_dir" ] && [ ! -L "$vpinfe_dir" ]; then
+    chown -R "$PINBALL_UID:$PINBALL_GID" "$vpinfe_dir" || true
+    find "$vpinfe_dir" -maxdepth 2 -type f -iname '*vpinfe*' -exec chmod 755 {} \; 2>/dev/null || true
+  fi
+done
+if [ -d "$TARGET/opt/pinball" ]; then
+  chown "$PINBALL_UID:$PINBALL_GID" "$TARGET/opt/pinball" || true
 fi
 
 chown -R "$PINBALL_UID:$PINBALL_GID" "$TARGET/home/pinball/.config/vpinfe" 2>/dev/null || true

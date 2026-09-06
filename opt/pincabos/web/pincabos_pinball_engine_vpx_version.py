@@ -15,6 +15,18 @@ from typing import Any
 from flask import jsonify, request
 
 
+def _pco_chemin(cle, defaut):
+    """PINCABOS_RUNTIMES_OPT_V1 : chemin de pincabos_paths (source de verite), sinon la valeur livree."""
+    try:
+        import sys as _sys
+        if "/opt/pincabos/tools" not in _sys.path:
+            _sys.path.insert(0, "/opt/pincabos/tools")
+        from pincabos_paths import PATHS as _pco
+        return getattr(_pco, cle)
+    except Exception:  # hors cab (tests, banc)
+        return defaut
+
+
 MARKER = "PINCABOS_PINBALL_ENGINE_VPX_VERSION_V1"
 GITHUB_RELEASE_URL = "https://api.github.com/repos/vpinball/vpinball/releases?per_page=20"
 CACHE_TTL_SECONDS = 300
@@ -107,9 +119,10 @@ def _configured_candidates() -> list[Path]:
             if wrapper.is_file():
                 candidates.extend(_extract_candidate_paths(_read_text(wrapper)))
 
+    runtimes = _pco_chemin("runtimes", "/opt/pinball")
     fallback_patterns = [
-        "/home/pinball/VPinballX*/VPinballX_BGFX",
-        "/home/pinball/VPinballX*/VPinballX*",
+        f"{runtimes}/VPinballX*/VPinballX_BGFX",
+        f"{runtimes}/VPinballX*/VPinballX*",
         "/opt/pincabos/apps/vpinball*/**/VPinballX_BGFX",
         "/opt/pincabos/apps/vpinball*/**/VPinballX*",
     ]
@@ -144,11 +157,11 @@ def _configured_candidates() -> list[Path]:
 def _local_vpx() -> dict[str, Any]:
     # PINCABOS_VPX_CANONICAL_LINK_V2
     #
-    # La source de vérité locale est le symlink officiel ~/vpx.
-    # Plusieurs versions VPX sont volontairement conservées pour rollback :
-    # il ne faut donc jamais choisir arbitrairement le premier répertoire
-    # VPinballX_BGFX-* trouvé sur disque.
-    canonical = Path("/home/pinball/vpx/VPinballX_BGFX")
+    # La source de vérité locale est le symlink officiel /opt/pinball/vpx
+    # (PINCABOS_RUNTIMES_OPT_V1). Plusieurs versions VPX sont volontairement
+    # conservées pour rollback : il ne faut donc jamais choisir arbitrairement
+    # le premier répertoire VPinballX_BGFX-* trouvé sur disque.
+    canonical = Path(_pco_chemin("vpx_bin", "/opt/pinball/vpx/VPinballX_BGFX"))
 
     preferred = None
 

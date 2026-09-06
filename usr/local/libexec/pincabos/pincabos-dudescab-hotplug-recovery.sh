@@ -32,7 +32,7 @@ vpx_running() {
 
 dof_helper_pids() {
     pgrep -f \
-        '/home/pinball/vpinfe/vpinfe --dof-helper' \
+        'vpinfe/vpinfe --dof-helper' \
         2>/dev/null || true
 }
 

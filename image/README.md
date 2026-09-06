@@ -28,8 +28,8 @@ archives ; une archive présente et vérifiée n'est pas retéléchargée.
 
 | Composant | Source | Posé dans le rootfs |
 |-----------|--------|---------------------|
-| `vpx` | release GitHub vpinball (`VPinballX_BGFX-…-linux-x64-Release.tar.gz`) | `home/pinball/VPinballX_BGFX-<version>-linux-x64/` + lien `home/pinball/vpx` |
-| `vpinfe` | release GitHub superhac/vpinfe, variante **slim** (`vpinfe-v…-linux-x64-slim.zip`, sans le Chromium embarqué de 633 Mo : les fenêtres VPinFE tournent dans le Google Chrome du système) | `home/pinball/vpinfe/` |
+| `vpx` | release GitHub vpinball (`VPinballX_BGFX-…-linux-x64-Release.tar.gz`) | `opt/pinball/VPinballX_BGFX-<version>-linux-x64/` + lien `opt/pinball/vpx` (et `home/pinball/vpx` de compatibilité) |
+| `vpinfe` | release GitHub superhac/vpinfe, variante **slim** (`vpinfe-v…-linux-x64-slim.zip`, sans le Chromium embarqué de 633 Mo : les fenêtres VPinFE tournent dans le Google Chrome du système) | `opt/pinball/vpinfe/` (et lien `home/pinball/vpinfe` de compatibilité) |
 | `libdof` | `opt/pincabos/overlays/libdof-canonical/libdof.so.0.4.7` (md5 contrôlé) | copie dans `plugins/dof` de VPX ; liens `vpinfe/_internal/libdof.so*` vers l'overlay VPinFE |
 | modèles | `opt/pincabos/templates/home` | ce qui manque dans `home/pinball` (jamais d'écrasement) |
 

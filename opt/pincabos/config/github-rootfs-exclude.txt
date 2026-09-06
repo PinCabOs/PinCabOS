@@ -268,9 +268,12 @@
 # .config/openbox/autostart, .local/share/VPinballX/10.8, .vpinball/
 # gamecontrollerdb.txt, .config/sunshine, .config/systemd/user).
 # ------------------------------------------------------------
+/opt/pinball/
 /home/pinball/vpinfe/
+/home/pinball/vpinfe
 /home/pinball/VPinballX_BGFX-*/
 /home/pinball/vpx
+/home/pinball/*.avant-opt*
 /home/pinball/*.sh
 /home/pinball/*.pdf
 /home/pinball/PR*

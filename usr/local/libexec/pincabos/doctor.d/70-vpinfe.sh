@@ -1,7 +1,25 @@
 pco_section "VPINFE"
 
-runtime="/home/pinball/vpinfe"
+. /opt/pincabos/tools/pincabos-paths.sh
+runtime="$PCO_VPINFE_DIR"
 launcher="/opt/pincabos/tools/run-vpinfe-systemd.sh"
+
+# PINCABOS_RUNTIMES_OPT_V1 : VPinFE vit sous /opt/pinball ; un cabinet installe
+# avant est migre au demarrage, ou ici en reparation quand personne ne joue.
+if [ -d "$PCO_VPINFE_DIR_HOME" ] && [ ! -L "$PCO_VPINFE_DIR_HOME" ]; then
+  if pco_repairing && ! pco_partie_en_cours && [ -x /usr/local/sbin/pincabos-runtimes-opt ]; then
+    if /usr/local/sbin/pincabos-runtimes-opt >/tmp/pincabos-runtimes-opt.log 2>&1; then
+      pco_go "VPinFE emplacement" "migre sous $PCO_RUNTIMES"
+      runtime="$PCO_RUNTIMES/vpinfe"
+    else
+      pco_warn "VPinFE emplacement" "migration en echec (voir /tmp/pincabos-runtimes-opt.log)"
+    fi
+  else
+    pco_warn "VPinFE emplacement" "encore dans le compte du joueur : migration sous $PCO_RUNTIMES au prochain demarrage"
+  fi
+else
+  pco_go "VPinFE emplacement" "$runtime"
+fi
 
 if [ -x "$runtime/vpinfe" ] && [ -d "$runtime/_internal" ]; then
   pco_go "VPinFE runtime" "exécutable + _internal présents"

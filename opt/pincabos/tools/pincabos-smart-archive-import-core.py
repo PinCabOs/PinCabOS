@@ -2615,7 +2615,7 @@ def extract_vbs_from_vpx(vpx_path, dest_dir=None):
     for discovered_ini in (
         Path("/home/pinball/.config/vpinfe/vpinfe.ini"),
         Path("/opt/pincabos/config/vpinfe/vpinfe.ini"),
-        Path("/home/pinball/vpinfe/vpinfe.ini"),
+        Path("/opt/pinball/vpinfe/vpinfe.ini"),
     ):
         if not discovered_ini.is_file():
             continue

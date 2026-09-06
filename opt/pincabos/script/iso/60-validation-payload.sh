@@ -168,12 +168,14 @@ if [ -z "${ARCHIVE_LIST_PYWEB:-}" ] || [ ! -s "$ARCHIVE_LIST_PYWEB" ]; then
 fi
 
 echo "--- VPinFE payload entries ---"
-grep -Ei '^\./home/pinball/vpinfe($|/)|^\./opt/pincabos/tools/run-vpinfe-systemd\.sh$|pincabos-vpinfe\.service' "$ARCHIVE_LIST_PYWEB" | sed -n '1,220p' || true
+# PINCABOS_RUNTIMES_OPT_V1 : VPinFE sous /opt/pinball ; le compte du joueur pour
+# une source pas encore migree (l'installateur migre sur la cible).
+grep -Ei '^\./(opt|home)/pinball/vpinfe($|/)|^\./opt/pincabos/tools/run-vpinfe-systemd\.sh$|pincabos-vpinfe\.service' "$ARCHIVE_LIST_PYWEB" | sed -n '1,220p' || true
 
-grep -q '^\./home/pinball/vpinfe/' "$ARCHIVE_LIST_PYWEB" \
-  || die "VPinFE runtime missing from payload: /home/pinball/vpinfe"
+grep -Eq '^\./(opt|home)/pinball/vpinfe/' "$ARCHIVE_LIST_PYWEB" \
+  || die "VPinFE runtime missing from payload: /opt/pinball/vpinfe"
 
-grep -q '^\./home/pinball/vpinfe/_internal/' "$ARCHIVE_LIST_PYWEB" \
+grep -Eq '^\./(opt|home)/pinball/vpinfe/_internal/' "$ARCHIVE_LIST_PYWEB" \
   || die "VPinFE packaged _internal runtime missing from payload"
 
 grep -q '^\./opt/pincabos/tools/run-vpinfe-systemd\.sh$' "$ARCHIVE_LIST_PYWEB" \

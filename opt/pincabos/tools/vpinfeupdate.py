@@ -21,8 +21,20 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+
+def _pco_chemin(cle, defaut):
+    """PINCABOS_RUNTIMES_OPT_V1 : chemin de pincabos_paths (source de verite), sinon la valeur livree."""
+    try:
+        import sys as _sys
+        if "/opt/pincabos/tools" not in _sys.path:
+            _sys.path.insert(0, "/opt/pincabos/tools")
+        from pincabos_paths import PATHS as _pco
+        return getattr(_pco, cle)
+    except Exception:  # hors cab (tests, banc)
+        return defaut
+
 REPO_API = "https://api.github.com/repos/superhac/vpinfe/releases/latest"
-TARGET = Path("/home/pinball/vpinfe")
+TARGET = Path(_pco_chemin("vpinfe_dir", "/opt/pinball/vpinfe"))  # PINCABOS_RUNTIMES_OPT_V1
 BACKUPS = Path("/opt/pincabos/backups/vpinfe-update")
 RUNTIME = Path("/opt/pincabos/runtime/vpinfe-update")
 STATE_DIR = Path("/opt/pincabos/state")

@@ -55,7 +55,11 @@ def defaults(user: str = "pinball") -> dict[str, str]:
     uid, gid, home = _user(user)
     root = "/opt/pincabos"
     config = f"{root}/config"
-    vpx_link = f"{home}/vpx"
+    # PINCABOS_RUNTIMES_OPT_V1 : les runtimes tiers (VPX, VPinFE) vivent sous
+    # /opt/pinball, hors du compte du joueur ; ~/vpx et ~/vpinfe restent des
+    # liens de compatibilite poses par pincabos-runtimes-opt.
+    runtimes = "/opt/pinball"
+    vpx_link = f"{runtimes}/vpx"
     vpx_pref = f"{home}/.pincabos/vpx"
     return {
         # identite
@@ -92,7 +96,9 @@ def defaults(user: str = "pinball") -> dict[str, str]:
         "network_drives": f"{home}/NetworkDrives",
         # VPX (BGFX standalone) : lien stable vers le dossier versionne,
         # preferences hors du dossier versionne de VPX (-PrefPath)
+        "runtimes": runtimes,
         "vpx_link": vpx_link,
+        "vpx_link_home": f"{home}/vpx",
         "vpx_bin": f"{vpx_link}/VPinballX_BGFX",
         "vpx_plugins": f"{vpx_link}/plugins",
         "vpx_pref": vpx_pref,
@@ -101,11 +107,27 @@ def defaults(user: str = "pinball") -> dict[str, str]:
         "dof_config": f"{vpx_pref}/directoutputconfig",
         "cabinet_xml": f"{vpx_pref}/directoutputconfig/cabinet.xml",
         # VPinFE
-        "vpinfe_dir": f"{home}/vpinfe",
-        "vpinfe_bin": f"{home}/vpinfe/vpinfe",
+        "vpinfe_dir": f"{runtimes}/vpinfe",
+        "vpinfe_bin": f"{runtimes}/vpinfe/vpinfe",
+        "vpinfe_dir_home": f"{home}/vpinfe",
         "vpinfe_ini": f"{home}/.config/vpinfe/vpinfe.ini",
-        "vpinfe_dmdutil": f"{home}/vpinfe/_internal/third-party/libdmdutil",
+        "vpinfe_dmdutil": f"{runtimes}/vpinfe/_internal/third-party/libdmdutil",
     }
+
+
+def compat_home(values: dict[str, str], exists=os.path.exists) -> dict[str, str]:
+    """PINCABOS_RUNTIMES_OPT_V1 : un cabinet pas encore migre (mise a jour
+    appliquee, redemarrage pas encore fait) a toujours ses runtimes dans le
+    compte du joueur : les chemins restent vrais jusqu'a la migration."""
+    if not exists(values["vpx_bin"]) and exists(f"{values['vpx_link_home']}/VPinballX_BGFX"):
+        values["vpx_link"] = values["vpx_link_home"]
+        values["vpx_bin"] = f"{values['vpx_link']}/VPinballX_BGFX"
+        values["vpx_plugins"] = f"{values['vpx_link']}/plugins"
+    if not exists(values["vpinfe_bin"]) and exists(f"{values['vpinfe_dir_home']}/vpinfe"):
+        values["vpinfe_dir"] = values["vpinfe_dir_home"]
+        values["vpinfe_bin"] = f"{values['vpinfe_dir']}/vpinfe"
+        values["vpinfe_dmdutil"] = f"{values['vpinfe_dir']}/_internal/third-party/libdmdutil"
+    return values
 
 
 def load(config_path: str = CONFIG) -> dict[str, str]:
@@ -114,9 +136,9 @@ def load(config_path: str = CONFIG) -> dict[str, str]:
         with open(config_path, encoding="utf-8") as handle:
             data = json.load(handle) or {}
     except (OSError, ValueError):
-        return values
+        return compat_home(values)
     if not isinstance(data, dict):
-        return values
+        return compat_home(values)
     paths = data.get("paths") if isinstance(data.get("paths"), dict) else {}
     if data.get("schema") == SCHEMA:
         if data.get("user") and data["user"] != values["user"]:
@@ -129,7 +151,7 @@ def load(config_path: str = CONFIG) -> dict[str, str]:
             value = paths.get(key)
             if isinstance(value, str) and value:
                 values[key] = value
-    return values
+    return compat_home(values)
 
 
 class _Paths:

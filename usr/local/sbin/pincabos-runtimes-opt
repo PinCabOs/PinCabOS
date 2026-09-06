@@ -1,0 +1,134 @@
+#!/usr/bin/env bash
+# PinCabOS — runtimes tiers (VPX, VPinFE) sous /opt/pinball.
+# PINCABOS_RUNTIMES_OPT_V1
+#
+# Jusqu'en Alpha 4.40, VPX (VPinballX_BGFX-*/ et le lien vpx) et VPinFE
+# (vpinfe/) vivaient dans le compte du joueur, meles a ses tables et a ses
+# reglages. Ils vivent maintenant sous /opt/pinball, avec le reste du
+# logiciel ; le compte du joueur garde deux liens de compatibilite (~/vpx,
+# ~/vpinfe) pour tout ce qui connait encore l'ancien emplacement.
+#
+# Ce script fait la migration d'un cabinet installe avant : un rename sur le
+# meme systeme de fichiers (aucune copie), puis les liens. Idempotent : rien
+# a faire sur un cabinet deja migre ou une installation neuve. Il est lance
+# au demarrage avant VPinFE et la WebApp (pincabos-runtimes-opt.service), par
+# le doctor en reparation hors partie, et par l'installateur sur la cible.
+#
+#   pincabos-runtimes-opt [--racine /] [--home /home/pinball] [--dest /opt/pinball]
+#                         [--uid N --gid N] [--dry-run]
+#
+# --racine prefixe toutes les operations (cible d'installation) ; les liens
+# poses restent absolus sans ce prefixe, tels que la cible les verra.
+set -Eeuo pipefail
+
+RACINE=""
+HOME_REL="/home/pinball"
+DEST_REL="/opt/pinball"
+UID_P=""
+GID_P=""
+DRY=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --racine) RACINE="${2%/}"; shift 2 ;;
+        --home) HOME_REL="$2"; shift 2 ;;
+        --dest) DEST_REL="$2"; shift 2 ;;
+        --uid) UID_P="$2"; shift 2 ;;
+        --gid) GID_P="$2"; shift 2 ;;
+        --dry-run) DRY=1; shift ;;
+        -h|--help) sed -n '2,21p' "$0"; exit 0 ;;
+        *) echo "pincabos-runtimes-opt: option inconnue $1" >&2; exit 2 ;;
+    esac
+done
+[ -z "$UID_P" ] && UID_P="$(id -u pinball 2>/dev/null || echo 1000)"
+[ -z "$GID_P" ] && GID_P="$(id -g pinball 2>/dev/null || echo 1000)"
+
+H="$RACINE$HOME_REL"
+D="$RACINE$DEST_REL"
+CHANGE=0
+
+log() { echo "pincabos-runtimes-opt: $*"; }
+run() {
+    CHANGE=1
+    if [ "$DRY" -eq 1 ]; then echo "+ $*"; return 0; fi
+    "$@"
+}
+present() { [ -e "$1" ] || [ -L "$1" ]; }
+proprietaire_lien() {   # le lien lui-meme au joueur ; `chown -h` de uutils 0.8 (Ubuntu 25.10) ne change rien : lchown
+    [ "$(stat -c %u "$1" 2>/dev/null)" = "$UID_P" ] && return 0
+    chown -h "$UID_P:$GID_P" "$1" 2>/dev/null || true
+    [ "$(stat -c %u "$1" 2>/dev/null)" = "$UID_P" ] && return 0
+    python3 -c 'import os, sys; os.lchown(sys.argv[1], int(sys.argv[2]), int(sys.argv[3]))' "$1" "$UID_P" "$GID_P" 2>/dev/null || true
+}
+lien() {   # lien <cible> <chemin> : pose (ou repose) un lien, au joueur
+    if [ -L "$2" ] && [ "$(readlink "$2")" = "$1" ]; then
+        [ "$DRY" -eq 1 ] || proprietaire_lien "$2"
+        return 0
+    fi
+    run ln -sfn "$1" "$2"
+    [ "$DRY" -eq 1 ] || proprietaire_lien "$2"
+}
+ecarter() {  # ecarter <chemin> : le compte a une copie alors que /opt/pinball a deja la sienne
+    local a="$1.avant-opt"
+    present "$a" && a="$a-$(date +%Y%m%d-%H%M%S)"
+    log "$(basename "$1") existe deja sous $DEST_REL : copie du compte ecartee en $(basename "$a")"
+    run mv "$1" "$a"
+}
+
+if [ ! -d "$H" ]; then
+    log "pas de compte du joueur en $HOME_REL : rien a faire"
+    exit 0
+fi
+
+if [ ! -d "$D" ]; then
+    run mkdir -p "$D"
+    [ "$DRY" -eq 1 ] || chown "$UID_P:$GID_P" "$D"
+fi
+
+# --- VPX : les bundles versionnes, puis le lien stable ------------------------
+for b in "$H"/VPinballX_BGFX-*; do
+    { [ -d "$b" ] && [ ! -L "$b" ]; } || continue
+    if present "$D/$(basename "$b")"; then
+        ecarter "$b"
+    else
+        run mv "$b" "$D/"
+        log "VPX $(basename "$b") -> $DEST_REL"
+    fi
+done
+if [ -L "$H/vpx" ] && [ "$(readlink "$H/vpx")" != "$DEST_REL/vpx" ]; then
+    nom="$(basename "$(readlink "$H/vpx")")"
+    [ -d "$D/$nom" ] && lien "$nom" "$D/vpx"
+fi
+if [ ! -e "$D/vpx/VPinballX_BGFX" ]; then
+    plus_recent="$(ls -d "$D"/VPinballX_BGFX-*/ 2>/dev/null | sort -V | tail -1 || true)"
+    [ -n "$plus_recent" ] && lien "$(basename "$plus_recent")" "$D/vpx"
+fi
+if present "$D/vpx"; then
+    if [ -d "$H/vpx" ] && [ ! -L "$H/vpx" ]; then ecarter "$H/vpx"; fi
+    lien "$DEST_REL/vpx" "$H/vpx"
+fi
+
+# --- VPinFE --------------------------------------------------------------------
+if [ -d "$H/vpinfe" ] && [ ! -L "$H/vpinfe" ]; then
+    if present "$D/vpinfe"; then
+        ecarter "$H/vpinfe"
+    else
+        run mv "$H/vpinfe" "$D/vpinfe"
+        log "VPinFE -> $DEST_REL/vpinfe"
+    fi
+fi
+if [ -d "$D/vpinfe" ]; then
+    lien "$DEST_REL/vpinfe" "$H/vpinfe"
+fi
+
+# les trois liens appartiennent au joueur, quel que soit le chemin pris plus haut
+if [ "$DRY" -eq 0 ]; then
+    for l in "$D/vpx" "$H/vpx" "$H/vpinfe"; do
+        [ -L "$l" ] && proprietaire_lien "$l"
+    done
+fi
+
+if [ "$CHANGE" -eq 0 ]; then
+    log "rien a faire : runtimes deja sous $DEST_REL"
+fi
+exit 0

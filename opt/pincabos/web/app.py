@@ -378,12 +378,11 @@ def _pco_dashboard_plus_final_detect_vpx():
     import subprocess
     import re
 
+    import pincabos_webapp_core as _core
+
     candidates = [
         "/opt/pincabos/bin/vpx-vpinfe-default.sh",
-        "/home/pinball/vpx/VPinballX_BGFX",
-        "/home/pinball/vpx/VPinballX_BGFX",
-        "/home/pinball/vpx/VPinballX_BGFX",
-        "/home/pinball/vpx/VPinballX_BGFX",
+        str(_core.PCO_PATHS.vpx_dir / "VPinballX_BGFX"),
     ]
 
     existing = [x for x in candidates if os.path.exists(x)]

@@ -1,0 +1,15 @@
+[Unit]
+Description=PinCabOS runtimes VPX et VPinFE sous /opt/pinball
+Documentation=https://pincabos.cc/
+# PINCABOS_RUNTIMES_OPT_V1 : migration d'un cabinet installe avant 4.41 (un
+# rename, aucune copie), avant tout ce qui lance VPinFE ou lit ses chemins.
+After=local-fs.target
+Before=pincabos-vpinfe.service pincabos-webapp.service pincabos-web.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/pincabos-runtimes-opt
+
+[Install]
+WantedBy=multi-user.target

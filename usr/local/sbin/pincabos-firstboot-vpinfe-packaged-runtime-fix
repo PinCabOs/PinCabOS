@@ -5,6 +5,8 @@ LOG="/var/log/pincabos-firstboot-vpinfe-packaged-runtime-fix.log"
 FLAG="/var/lib/pincabos/firstboot-vpinfe-packaged-runtime.done"
 
 mkdir -p /var/log /var/lib/pincabos
+# PINCABOS_PATHS_CONSUMER_V1 (PINCABOS_RUNTIMES_OPT_V1 : VPinFE sous /opt/pinball)
+. /opt/pincabos/tools/pincabos-paths.sh
 
 {
   echo "==============================================================="
@@ -19,13 +21,13 @@ mkdir -p /var/log /var/lib/pincabos
 
   echo
   echo "=== Runtime files ==="
-  ls -lah /home/pinball/vpinfe 2>/dev/null || true
-  ls -lah /home/pinball/vpinfe/_internal 2>/dev/null | sed -n '1,80p' || true
+  ls -lah "$PCO_VPINFE_DIR" 2>/dev/null || true
+  ls -lah "$PCO_VPINFE_DIR/_internal" 2>/dev/null | sed -n '1,80p' || true
   ls -lah /opt/pincabos/tools/run-vpinfe-systemd.sh 2>/dev/null || true
 
   echo
   echo "=== Permissions ==="
-  chown -R pinball:pinball /home/pinball/vpinfe 2>/dev/null || true
+  chown -R pinball:pinball "$PCO_VPINFE_DIR" 2>/dev/null || true
   chown -R pinball:pinball /home/pinball/.config/vpinfe 2>/dev/null || true
   chown -R pinball:pinball /opt/pincabos/config/vpinfe 2>/dev/null || true
   chmod 755 /opt/pincabos/tools/run-vpinfe-systemd.sh 2>/dev/null || true
