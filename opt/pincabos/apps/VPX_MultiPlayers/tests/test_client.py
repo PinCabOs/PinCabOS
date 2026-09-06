@@ -61,6 +61,71 @@ class ClientTests(unittest.TestCase):
         with self.assertRaises(MultiplayerClientError):
             client.request("GET", "/api/me")
 
+    def test_state_keeps_control_contract_when_pincabshare_route_is_missing(self):
+        client = ServerClient(
+            DeviceCredentials("PinCabOS-Device", "s" * 48, "cab-1"),
+            opener=lambda *_args, **_kwargs: FakeResponse({"ok": True}),
+        )
+        calls = []
+
+        def request(method, path, payload=None):
+            calls.append((method, path, payload))
+            if path == "/api/device/multiplayer/state":
+                return {
+                    "ok": True,
+                    "session": {"session_id": "mp-test"},
+                    "control": {"desired": "released", "generation": 1},
+                }
+            raise MultiplayerClientError("server_http_404")
+
+        client.request = request
+        value = client.state()
+
+        self.assertEqual(value["control"]["desired"], "released")
+        self.assertFalse(value["pincabshare"]["enabled"])
+        self.assertEqual(
+            value["pincabshare"]["reason"],
+            "policy-endpoint-unavailable",
+        )
+        self.assertEqual(
+            [path for _method, path, _payload in calls],
+            [
+                "/api/device/multiplayer/state",
+                "/api/device/multiplayer/pincabshare",
+            ],
+        )
+
+    def test_state_merges_valid_pincabshare_policy(self):
+        client = ServerClient(
+            DeviceCredentials("PinCabOS-Device", "s" * 48, "cab-1"),
+            opener=lambda *_args, **_kwargs: FakeResponse({"ok": True}),
+        )
+
+        def request(_method, path, _payload=None):
+            if path == "/api/device/multiplayer/state":
+                return {"ok": True, "control": {"desired": "released"}}
+            return {
+                "ok": True,
+                "pincabshare": {
+                    "version": 2,
+                    "enabled": True,
+                    "session_id": "mp-test",
+                    "room_code": "ABC123",
+                    "local_cabinet_id": 1,
+                    "issued_at": "2026-09-06T22:00:00Z",
+                    "expires_at": "2026-09-06T22:00:12Z",
+                    "peers": [
+                        {"cabinet_id": 10, "ip": "192.168.254.142"}
+                    ],
+                },
+            }
+
+        client.request = request
+        value = client.state()
+
+        self.assertTrue(value["pincabshare"]["enabled"])
+        self.assertEqual(value["pincabshare"]["peers"][0]["cabinet_id"], 10)
+
     def test_join_sends_normalized_room_code(self):
         captured = {}
 

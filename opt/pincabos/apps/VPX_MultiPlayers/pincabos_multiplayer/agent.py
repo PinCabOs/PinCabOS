@@ -13,6 +13,7 @@ from pathlib import Path
 from . import COMPONENT_VERSION, PROTOCOL_VERSION
 from .client import MultiplayerClientError, ServerClient, load_credentials
 from .control import CabinetControlError, CabinetControlManager
+from .pincabshare import PinCabShareError, PinCabShareManager
 from .runtime import (
     RuntimeIsolationError,
     RuntimeLayout,
@@ -51,13 +52,42 @@ def state_payload(
     server: ServerClient,
     layout: RuntimeLayout,
     control: CabinetControlManager | None = None,
+    share: PinCabShareManager | None = None,
 ) -> dict:
     value = server.state()
     value["local_runtime"] = layout.status()
     value["local_control"] = control.lease() if control else {}
+    value["local_pincabshare"] = share.status() if share else {}
     value["component_version"] = COMPONENT_VERSION
     value["protocol_version"] = PROTOCOL_VERSION
     return value
+
+
+def safe_revoke_share(share: PinCabShareManager, reason: str) -> dict:
+    """Révoque PinCabShare sans masquer un échec du firewall."""
+    try:
+        return share.revoke(reason)
+    except PinCabShareError as exc:
+        return {
+            **share.status(),
+            "revoke_reason": reason,
+            "error": str(exc),
+            "fail_closed_confirmed": False,
+        }
+
+
+def safe_reconcile_share(share: PinCabShareManager, value: dict) -> dict:
+    """Applique la politique serveur ou expose clairement un NOGO nftables."""
+    try:
+        result = share.reconcile(value)
+        result["fail_closed_confirmed"] = True
+        return result
+    except PinCabShareError as exc:
+        return {
+            **share.status(),
+            "error": str(exc),
+            "fail_closed_confirmed": False,
+        }
 
 
 def acknowledge_control(server: ServerClient, value: dict, local_control: dict) -> dict | None:
@@ -119,19 +149,21 @@ def run(args: argparse.Namespace) -> dict | None:
     layout = RuntimeLayout.configured()
     layout.prepare_writable_directories()
     control = CabinetControlManager(layout)
+    share = PinCabShareManager(layout)
 
     if args.command == "doctor":
         return {
             "ok": True,
             "local_runtime": layout.status(),
             "local_control": control.lease(),
+            "local_pincabshare": share.status(),
         }
     if args.command == "install-engine":
         return {"ok": True, "installation": install_engine_copy(layout, Path(args.source))}
 
     server = client()
     if args.command == "status":
-        return state_payload(server, layout, control)
+        return state_payload(server, layout, control, share)
     if args.command == "create":
         return server.join()
     if args.command == "join":
@@ -150,6 +182,9 @@ def run(args: argparse.Namespace) -> dict | None:
         result = session_action(server, args.command)
         if args.command == "stop":
             result["local_control"] = control.release("manual-stop")
+            result["local_pincabshare"] = safe_revoke_share(
+                share, "manual-multiplayer-stop"
+            )
         return result
 
     if args.command == "launch":
@@ -182,20 +217,28 @@ def run(args: argparse.Namespace) -> dict | None:
             raise RuntimeIsolationError("watch_interval_invalid")
         while True:
             try:
-                value = state_payload(server, layout, control)
+                value = state_payload(server, layout, control, share)
+
+                # PinCabShare est indépendant de la prise de contrôle VPX :
+                # le Lobby peut autoriser/révoquer NFS sans toucher à VPinFE.
+                value["local_pincabshare"] = safe_reconcile_share(share, value)
+
                 local_control = control.reconcile(value)
                 value["local_control"] = local_control
                 acknowledgement = acknowledge_control(server, value, local_control)
                 if acknowledgement is not None:
                     value["control_ack"] = acknowledgement
             except (MultiplayerClientError, RuntimeIsolationError) as exc:
-                # Une panne réseau ne libère jamais le cabinet à l'aveugle :
-                # on conserve le dernier lease et on attend le prochain état serveur.
+                # Le lease de contrôle VPX conserve son comportement historique,
+                # mais PinCabShare, lui, révoque immédiatement sur perte serveur.
                 value = {
                     "ok": False,
                     "error": str(exc),
                     "local_runtime": layout.status(),
                     "local_control": control.lease(),
+                    "local_pincabshare": safe_revoke_share(
+                        share, "server-state-unavailable"
+                    ),
                 }
             except CabinetControlError as exc:
                 value = {
@@ -206,6 +249,7 @@ def run(args: argparse.Namespace) -> dict | None:
                         **control.lease(),
                         "error": str(exc),
                     },
+                    "local_pincabshare": share.status(),
                 }
             layout.write_session_state(value)
             time.sleep(args.interval)
@@ -223,6 +267,7 @@ def main(argv: list[str] | None = None) -> int:
         MultiplayerClientError,
         RuntimeIsolationError,
         CabinetControlError,
+        PinCabShareError,
         OSError,
         ValueError,
     ) as exc:

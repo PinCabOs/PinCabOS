@@ -30,6 +30,37 @@ Tout ce qui appartient au mode LAB demeure sous :
 Le lanceur force aussi `-PrefPath .../config/vpx`. Le binaire, le `HOME`, les
 répertoires XDG et les tables sont donc tous isolés de la partie privée.
 
+## PinCabShare V2 — barrière NFS pilotée par le Lobby
+
+PinCabShare V2 remplace le modèle de confiance « tout le LAN » de l'ancien
+mesh. Le cabinet ne fait aucune découverte Avahi/mDNS pour décider qui peut
+accéder au partage.
+
+Le watcher lit uniquement la politique `pincabshare` renvoyée par
+`GET /api/device/multiplayer/state`, donc via l'identité appareil
+`PinCabOS-Device` déjà authentifiée. La politique doit :
+
+- être en version `2`;
+- viser exactement la session Lobby active du cabinet;
+- confirmer que ce cabinet appartient à la session;
+- contenir de 1 à 3 CAB pairs avec une IPv4 privée exacte;
+- avoir une durée de vie maximale de 90 secondes;
+- ne pas être expirée.
+
+Le cabinet maintient une table nftables dédiée `inet pincabshare_v2`. Seules
+les IP exactes présentes dans la politique fraîche peuvent joindre NFS sur
+TCP/UDP 2049. Toute autre source est bloquée pour ce port.
+
+La politique est **fail-closed** : absence, expiration, mismatch de session,
+IP publique, perte du serveur ou arrêt manuel du multijoueur => l'ensemble des
+pairs autorisés est vidé. L'état local est publié dans
+`sessions/pincabshare-v2.json`.
+
+Cette barrière ne modifie et ne lance jamais le VPX privé, le BGFX privé ou
+VPinFE. Elle ne transforme pas NFS en transport Internet : les pairs
+PinCabShare V2 doivent être joignables en IPv4 privée; le transport
+multijoueur Internet reste un chantier distinct.
+
 ## Installation sur un cabinet de test
 
 Le script refuse d'écraser un moteur déjà copié. Il copie la totalité du

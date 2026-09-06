@@ -67,6 +67,20 @@ def load_credentials(path: Path = DEFAULT_DEVICE_STATE) -> DeviceCredentials:
     return DeviceCredentials(token_type, token, cabinet_uuid)
 
 
+def _disabled_pincabshare(reason: str) -> dict[str, object]:
+    return {
+        "version": 2,
+        "enabled": False,
+        "reason": str(reason),
+        "session_id": None,
+        "room_code": None,
+        "local_cabinet_id": None,
+        "issued_at": None,
+        "expires_at": None,
+        "peers": [],
+    }
+
+
 class ServerClient:
     def __init__(
         self,
@@ -134,7 +148,25 @@ class ServerClient:
         return value
 
     def state(self) -> dict:
-        return self.request("GET", "/api/device/multiplayer/state")
+        # Le contrat historique de contrôle reste l'autorité principale.
+        value = self.request("GET", "/api/device/multiplayer/state")
+
+        # PinCabShare V2 est additif. Une version serveur plus ancienne, un
+        # endpoint indisponible ou une panne de ce sous-contrat ne doit jamais
+        # casser PREPARE/READY/control : le partage reste simplement fermé.
+        try:
+            share_value = self.request(
+                "GET",
+                "/api/device/multiplayer/pincabshare",
+            )
+            policy = share_value.get("pincabshare")
+            if not isinstance(policy, dict):
+                policy = _disabled_pincabshare("policy-response-invalid")
+        except MultiplayerClientError:
+            policy = _disabled_pincabshare("policy-endpoint-unavailable")
+
+        value["pincabshare"] = policy
+        return value
 
     def join(self, room_code: str | None = None) -> dict:
         payload = {} if room_code is None else {"room_code": normalize_room_code(room_code)}
