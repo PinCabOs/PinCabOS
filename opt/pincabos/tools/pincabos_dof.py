@@ -23,6 +23,8 @@ except ImportError:   # hors /opt (tests, depot) : le module vit a cote des outi
     from pathlib import Path as _Path
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[1] / "tools"))
     import pincabos_ini
+import os
+import shutil
 from datetime import datetime
 from pathlib import Path
 
@@ -327,8 +329,105 @@ def dossier_cabinet(motif: str = CABINETS_GLOB) -> Path | None:
     return Path(dossiers[-1]) if dossiers else None
 
 
+# PINCABOS_DOF_GLOBALCONFIG_V1
+# Cab de Yann, installation neuve 4.29 (06/09/2026) : cabinet.xml genere, Teensy
+# declare, et pourtant « No cabinet config file loaded. Will use AutoConfig » dans
+# VPX comme dans VPinFE. libdof ne lit cabinet.xml que si GlobalConfig_B2SServer.xml
+# le designe ; sans lui il ne garde que ce qu'il detecte seul (DudesCab, LedWiz), et
+# un controleur de rubans n'est pas detectable. Personne n'ecrivait ce fichier.
+# VPX (PrefPath) et VPinFE lisent chacun leur dossier directoutputconfig : les deux
+# recoivent cabinet.xml et son GlobalConfig. Chemins absolus : libdof ne connait pas
+# de variable {GlobalConfigDir}.
+GLOBAL_CONFIG = "GlobalConfig_B2SServer.xml"
+DOSSIERS_DOF_SUPPLEMENTAIRES = (Path("/home/pinball/.pincabos/vpx/directoutputconfig"),)
+
+
+def global_config_xml(dossier: Path) -> str:
+    d = str(dossier)
+    return (
+        '<?xml version="1.0" encoding="utf-8"?>\n'
+        "<!-- PinCabOS (PINCABOS_DOF_GLOBALCONFIG_V1) : dit a DOF (libdof) ou sont cabinet.xml\n"
+        "     et les directoutputconfig*.ini. Sans ce fichier DOF passe en AutoConfig et ignore\n"
+        "     les controleurs de rubans (Teensy, Wemos) declares dans cabinet.xml. -->\n"
+        "<GlobalConfig>\n"
+        f"  <IniFilesPath>{d}</IniFilesPath>\n"
+        f"  <CabinetConfigFilePattern>{d}/cabinet.xml</CabinetConfigFilePattern>\n"
+        "  <EnableLogging>true</EnableLogging>\n"
+        "  <ClearLogOnSessionStart>true</ClearLogOnSessionStart>\n"
+        f"  <LogFilePattern>{d}/DirectOutput.log</LogFilePattern>\n"
+        "</GlobalConfig>\n"
+    )
+
+
+def _meme_proprietaire(fichier: Path, dossier: Path) -> None:
+    try:
+        st = dossier.stat()
+        os.chown(fichier, st.st_uid, st.st_gid)
+    except OSError:
+        pass
+
+
+def poser_global_config(dossier: Path, sauvegardes: Path = SAUVEGARDES) -> str:
+    """GlobalConfig_B2SServer.xml a cote de cabinet.xml. Un fichier qui designe deja un
+    cabinet.xml (reglage de l'utilisateur) est garde ; un autre est sauvegarde puis remplace."""
+    gc = dossier / GLOBAL_CONFIG
+    if gc.is_file():
+        texte = gc.read_text(encoding="utf-8", errors="replace")
+        if "<CabinetConfigFilePattern>" in texte and "cabinet.xml" in texte:
+            return f"GlobalConfig DOF en place : {gc}"
+        sauvegardes.mkdir(parents=True, exist_ok=True)
+        copie = sauvegardes / (GLOBAL_CONFIG + ".bak-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+        copie.write_bytes(gc.read_bytes())
+    gc.write_text(global_config_xml(dossier), encoding="utf-8")
+    _meme_proprietaire(gc, dossier)
+    return f"GlobalConfig DOF pose : {gc}"
+
+
+def propager_cabinet(dossier: Path, sauvegardes: Path = SAUVEGARDES,
+                     supplementaires: tuple = DOSSIERS_DOF_SUPPLEMENTAIRES) -> list:
+    """cabinet.xml de `dossier` copie dans les autres dossiers DOF existants (PrefPath de VPX),
+    et GlobalConfig_B2SServer.xml pose partout ou il y a un cabinet.xml."""
+    journal = [poser_global_config(dossier, sauvegardes)]
+    cab = dossier / "cabinet.xml"
+    for autre in supplementaires:
+        autre = Path(autre)
+        if not autre.is_dir() or autre.resolve() == dossier.resolve():
+            continue
+        cible = autre / "cabinet.xml"
+        if cab.is_file() and (not cible.is_file() or cible.read_bytes() != cab.read_bytes()):
+            if cible.is_file():
+                sauvegardes.mkdir(parents=True, exist_ok=True)
+                copie = sauvegardes / ("cabinet.xml.bak-" + autre.parent.parent.name + "-" + datetime.now().strftime("%Y%m%d-%H%M%S"))
+                copie.write_bytes(cible.read_bytes())
+            shutil.copyfile(cab, cible)
+            _meme_proprietaire(cible, autre)
+            journal.append(f"cabinet.xml copie : {cible}")
+        if cible.is_file():
+            journal.append(poser_global_config(autre, sauvegardes))
+    return journal
+
+
+def dossiers_dof(supplementaires: tuple = DOSSIERS_DOF_SUPPLEMENTAIRES) -> list:
+    """Les dossiers directoutputconfig existants (VPinFE, PrefPath de VPX), sans doublon."""
+    out = []
+    for d in [dossier_cabinet()] + [Path(p) for p in supplementaires]:
+        if d and d.is_dir() and d.resolve() not in [o.resolve() for o in out]:
+            out.append(d)
+    return out
+
+
+def reparer_global_config(supplementaires: tuple = DOSSIERS_DOF_SUPPLEMENTAIRES, sauvegardes: Path = SAUVEGARDES) -> list:
+    """Doctor / CLI : chaque dossier DOF qui a un cabinet.xml recoit son GlobalConfig."""
+    journal = []
+    for d in dossiers_dof(supplementaires):
+        if (d / "cabinet.xml").is_file():
+            journal.append(poser_global_config(d, sauvegardes))
+    return journal or ["aucun cabinet.xml : rien a faire (AutoConfig DOF)"]
+
+
 def appliquer_toys_premier_demarrage(inv: dict, inventaire: Path = INVENTAIRE, dossier: Path | None = None,
-                                     sauvegardes: Path = SAUVEGARDES, mod=None) -> list:
+                                     sauvegardes: Path = SAUVEGARDES, mod=None,
+                                     supplementaires: tuple = DOSSIERS_DOF_SUPPLEMENTAIRES) -> list:
     """Pose l'inventaire de la page DOF et, s'il y a un contrôleur de rubans actif, le cabinet.xml."""
     journal = []
     inventaire.parent.mkdir(parents=True, exist_ok=True)
@@ -354,5 +453,8 @@ def appliquer_toys_premier_demarrage(inv: dict, inventaire: Path = INVENTAIRE, d
         copie.write_bytes(cab.read_bytes())
         journal.append(f"ancien cabinet.xml sauvegardé : {copie}")
     cab.write_text(mod.gen(cfg), encoding="utf-8")
+    _meme_proprietaire(cab, dossier)
     journal.append(f"cabinet.xml généré : {cab} ({len(cfg['strips'])} contrôleur(s) de rubans)")
+    # PINCABOS_DOF_GLOBALCONFIG_V1 : sans GlobalConfig, DOF n'aurait jamais lu ce cabinet.xml
+    journal += propager_cabinet(dossier, sauvegardes, supplementaires)
     return journal
