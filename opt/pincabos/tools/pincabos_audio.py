@@ -380,6 +380,36 @@ def assurer_profil_surround(pf: dict, canaux: int, run=executer) -> list:
     return [f"carte {carte['name']} : profil {profil} active pour le SSF"]
 
 
+OUTIL_SURROUND = Path("/usr/local/sbin/pincabos-audio-surround")
+
+
+def activer_71(run=executer, outil: Path | None = None) -> list:
+    """PINCABOS_AUDIO_71_RETASK_V1 : passe la carte en 7.1 en reaffectant l'entree
+    ligne en sortie laterale, exactement ce que fait la page Audio du cabinet.
+
+    Retex du cab de Yann (07/09/2026) : le 7.1 choisi dans l'assistant restait sans
+    effet sur une ALC1220, qui n'expose que six canaux tant que la prise d'entree
+    n'a pas ete reaffectee. Le premier demarrage se rabattait en 5.1 avec un
+    avertissement dans un journal que personne ne lit ; la sortie « centre + caisson »
+    se retrouvait a alimenter des exciters et les lateraux restaient muets. La
+    reaffectation est reversible et rejouee a chaque demarrage (apply-boot).
+
+    Le marqueur « active pour le SSF » est celui qu'attend l'appelant pour relire
+    les sinks : le nom du sink change (analog-surround-51 -> analog-surround-71).
+    """
+    # resolu a l'appel : un banc ou un test peut poser un autre chemin
+    outil = Path(outil) if outil else OUTIL_SURROUND
+    if not outil.is_file():
+        return [f"7.1 : {outil} absent, la carte reste a six canaux"]
+    rc, out = run([str(outil), "enable", "7.1"], timeout=120)
+    detail = (out or "").strip().splitlines()
+    detail = detail[-1][-140:] if detail else ""
+    if rc != 0:
+        return [f"7.1 : reaffectation refusee ({detail})"]
+    return ["carte : profil 7.1 active pour le SSF, entree ligne reaffectee en sortie laterale"
+            + (f" ({detail})" if detail else "")]
+
+
 def canaux_du_sink(texte: str, nom: str) -> int:
     """Nombre de canaux du sink `nom` dans `pactl list sinks` (Sample Specification: s16le 2ch 48000Hz), 0 si inconnu."""
     bloc = ""
@@ -508,7 +538,12 @@ def appliquer_premier_demarrage(cfg: dict, run=executer, vpx_ini: Path = VPX_INI
         # PINCABOS_AUDIO_PROFIL_SURROUND_V1 : la carte offre peut-etre un profil multicanal
         bascule = assurer_profil_surround(pf, exige, run)
         if exige == 8 and not any("active pour le SSF" in l for l in bascule):
-            # pas de 7.1 sur cette carte : le 5.1 au moins (lateraux muets, on le dira)
+            # PINCABOS_AUDIO_71_RETASK_V1 : la carte n'expose pas huit canaux telle
+            # quelle. Plutot que de rabattre le choix de l'utilisateur, on reaffecte
+            # l'entree ligne en sortie laterale (reversible) comme le fait la page Audio.
+            bascule += activer_71(run)
+        if exige == 8 and not any("active pour le SSF" in l for l in bascule):
+            # meme apres la reaffectation : le 5.1 au moins (lateraux muets, on le dira)
             bascule += assurer_profil_surround(pf, 6, run)
         journal += bascule
         if any("active pour le SSF" in l for l in bascule):
@@ -524,9 +559,9 @@ def appliquer_premier_demarrage(cfg: dict, run=executer, vpx_ini: Path = VPX_INI
         elif canaux and canaux < exige:
             # PINCABOS_AUDIO_71_V1 : 7.1 demande sur une sortie 5.1 : VPX joue lockbar + arriere +
             # basses, les lateraux (fronton) restent muets. Le mode est garde, on le dit.
-            journal.append(f"WARN: Sound3D {voulu} (7.1) demande mais la sortie {pf['name']} n'a que {canaux} canaux : "
-                           "les canaux lateraux (fronton) seront muets ; il faut une sortie 7.1 (prise line-in retaskee en "
-                           "sortie laterale) ou une sortie backbox separee")
+            journal.append(f"WARN: Sound3D {voulu} (7.1) demande mais la sortie {pf['name']} n'a que {canaux} canaux "
+                           "malgre la reaffectation tentee : les canaux lateraux (fond du meuble) seront muets ; il faut "
+                           "une carte qui expose huit canaux ou une sortie backbox separee")
     # PINCABOS_AUDIO_PREMIER_DEMARRAGE_V2 : VPX n'a pas encore écrit son ini au
     # premier démarrage d'un cab neuf (vu en VM : « absent, rien écrit ») ; on le
     # crée avec la seule section [Player], VPX complète le reste à son premier

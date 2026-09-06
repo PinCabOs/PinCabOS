@@ -246,7 +246,10 @@ class Audio(unittest.TestCase):
             ini = Path(d, "VPinballX.ini")
             j = pa.appliquer_premier_demarrage({"playfield_device": "hw:0,0", "backbox_device": "", "installer": {"sound3d": "4", "volume": 70}}, run=run, vpx_ini=ini)
             self.assertIn("Sound3D = 4", ini.read_text(encoding="utf-8"))
-            self.assertTrue(any("lateraux (fronton) seront muets" in l for l in j), j)
+            # PINCABOS_AUDIO_71_RETASK_V1 : la reaffectation est tentee d'abord ; sans l'outil
+            # (banc, conteneur) elle ne peut pas aboutir et le 5.1 reste le repli annonce.
+            self.assertTrue(any("lateraux (fond du meuble) seront muets" in l for l in j), j)
+            self.assertTrue(any("pincabos-audio-surround" in l for l in j), j)
             self.assertTrue(any(a[-1] == "output:analog-surround-51" for a in appels if "set-card-profile" in a), appels)
 
     def test_ssf_sur_sortie_stereo_retombe_en_stereo(self):
@@ -563,6 +566,132 @@ class PlanDeCablage(unittest.TestCase):
                 texte = self.i18n[langue][cle].lower()
                 self.assertIn("lockbar", texte, f"{langue}/{cle}")
                 self.assertTrue("arrière" in texte or "rear" in texte, f"{langue}/{cle}")
+
+
+class SeptUnEffectif(unittest.TestCase):
+    """PINCABOS_AUDIO_71_RETASK_V1 — choisir le 7.1 dans l'assistant doit suffire.
+
+    Cab de Yann : sur une ALC1220, qui n'expose six canaux que tant que la prise
+    d'entree n'est pas reaffectee, le mode SSF choisi a l'installation se rabattait
+    en 5.1 avec un avertissement dans un journal que personne ne lit. La sortie
+    « centre + caisson » alimentait des exciters et les lateraux restaient muets.
+    """
+
+    CARTES_51 = """Card #49
+\tName: alsa_card.pci-0000_00_1f.3
+\tProfiles:
+\t\toutput:analog-stereo: Analog Stereo Output (sinks: 1)
+\t\toutput:analog-surround-51: Analog Surround 5.1 (sinks: 1)
+\tActive Profile: output:analog-stereo
+\tProperties:
+\t\talsa.card = "0"
+"""
+
+    def faux_run(self, resultats):
+        appels = []
+
+        def run(args, timeout=20, **kw):
+            appels.append(list(args))
+            for motif, sortie in resultats:
+                if motif in " ".join(str(a) for a in args):
+                    return sortie
+            return (0, "")
+
+        return appels, run
+
+    def test_outil_absent(self):
+        appels, run = self.faux_run([])
+        j = pa.activer_71(run=run, outil=Path("/nulle/part/pincabos-audio-surround"))
+        self.assertEqual(appels, [], "aucune commande si l'outil n'est pas la")
+        self.assertTrue(any("absent" in l for l in j), j)
+        self.assertFalse(any("active pour le SSF" in l for l in j), "pas de faux succes")
+
+    def test_reaffectation_reussie(self):
+        with tempfile.TemporaryDirectory() as d:
+            outil = Path(d, "pincabos-audio-surround")
+            outil.write_text("#!/bin/sh\n", encoding="utf-8")
+            appels, run = self.faux_run([("enable 7.1", (0, "GO: broche 0x1a reaffectee ; profil output:analog-surround-71"))])
+            j = pa.activer_71(run=run, outil=outil)
+            self.assertEqual(appels, [[str(outil), "enable", "7.1"]])
+            self.assertTrue(any("active pour le SSF" in l for l in j), j)
+            self.assertTrue(any("0x1a" in l for l in j), j)
+
+    def test_reaffectation_refusee(self):
+        with tempfile.TemporaryDirectory() as d:
+            outil = Path(d, "pincabos-audio-surround")
+            outil.write_text("#!/bin/sh\n", encoding="utf-8")
+            _, run = self.faux_run([("enable 7.1", (1, "NOGO: ce codec n'expose pas de prise reaffectable"))])
+            j = pa.activer_71(run=run, outil=outil)
+            self.assertTrue(any("refusee" in l for l in j), j)
+            self.assertFalse(any("active pour le SSF" in l for l in j), "pas de relecture des sinks pour rien")
+
+    def test_le_premier_demarrage_tente_la_reaffectation(self):
+        """Mode 5 sur une carte a six canaux : l'outil est appele, puis les sinks relus."""
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            ini = tmp / "VPinballX.ini"
+            sinks51 = ('Sink #1\n\tName: alsa_output.pci-0000_00_1f.3.analog-surround-51\n'
+                       '\tDescription: Built-in Audio Analog Surround 5.1\n\tSample Specification: s32le 6ch 48000Hz\n'
+                       '\tProperties:\n\t\talsa.card = "0"\n\t\talsa.device = "0"\n')
+            sinks71 = sinks51.replace("surround-51", "surround-71").replace("Surround 5.1", "Surround 7.1").replace("6ch", "8ch")
+            etat = {"sinks": sinks51}
+            appels = []
+            outil = tmp / "pincabos-audio-surround"
+            outil.write_text("#!/bin/sh\n", encoding="utf-8")
+            ancien_outil, pa.OUTIL_SURROUND = pa.OUTIL_SURROUND, outil
+
+            def run(args, timeout=20, **kw):
+                texte = " ".join(str(a) for a in args)
+                appels.append(texte)
+                if "list sinks" in texte:
+                    return (0, etat["sinks"])
+                if "list cards" in texte:
+                    return (0, self.CARTES_51)
+                if "enable 7.1" in texte:          # la reaffectation aboutit
+                    etat["sinks"] = sinks71
+                    return (0, "GO: profil output:analog-surround-71")
+                return (0, "")
+
+            cfg = {"playfield_device": "hw:0,0", "backbox_device": "hw:0,0",
+                   "installer": {"sound3d": "5", "volume": 70}}
+            j = pa.appliquer_premier_demarrage(cfg, run=run, vpx_ini=ini)
+            self.assertTrue(any("enable 7.1" in a for a in appels), appels)
+            self.assertTrue(any("active pour le SSF" in l for l in j), j)
+            # les sinks ont ete relus : VPX recoit le nom de la sortie 7.1
+            texte = ini.read_text(encoding="utf-8")
+            self.assertIn("SoundDevice = Built-in Audio Analog Surround 7.1", texte)
+            self.assertIn("Sound3D = 5", texte)
+            self.assertFalse(any("seront muets" in l for l in j), j)
+        finally:
+            pa.OUTIL_SURROUND = ancien_outil
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_carte_deja_en_huit_canaux(self):
+        """Rien a reaffecter si la carte expose deja le profil 7.1."""
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            outil = tmp / "pincabos-audio-surround"
+            outil.write_text("#!/bin/sh\n", encoding="utf-8")
+            ancien_outil, pa.OUTIL_SURROUND = pa.OUTIL_SURROUND, outil
+            cartes = self.CARTES_51.replace("output:analog-surround-51: Analog Surround 5.1 (sinks: 1)",
+                                            "output:analog-surround-71: Analog Surround 7.1 (sinks: 1)")
+            sinks = ('Sink #1\n\tName: alsa_output.pci-0000_00_1f.3.analog-surround-71\n'
+                     '\tDescription: Built-in Audio Analog Surround 7.1\n\tSample Specification: s32le 8ch 48000Hz\n'
+                     '\tProperties:\n\t\talsa.card = "0"\n\t\talsa.device = "0"\n')
+            appels = []
+
+            def run(args, timeout=20, **kw):
+                texte = " ".join(str(a) for a in args)
+                appels.append(texte)
+                return (0, sinks if "list sinks" in texte else cartes if "list cards" in texte else "")
+
+            cfg = {"playfield_device": "hw:0,0", "backbox_device": "hw:0,0",
+                   "installer": {"sound3d": "5", "volume": 70}}
+            pa.appliquer_premier_demarrage(cfg, run=run, vpx_ini=tmp / "VPinballX.ini")
+            self.assertFalse(any("enable 7.1" in a for a in appels), "la carte donne deja huit canaux")
+        finally:
+            pa.OUTIL_SURROUND = ancien_outil
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":
