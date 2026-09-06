@@ -24,6 +24,17 @@
     "data_plane": "cabinet-to-cabinet",
     "transport": "pending-poc"
   },
+  "pincabshare": {
+    "policy_version": 2,
+    "authority": "device-multiplayer-state",
+    "discovery_trusted": false,
+    "network_gate": "nftables",
+    "service": "nfs",
+    "ports": [2049],
+    "max_policy_lifetime_seconds": 90,
+    "private_ipv4_only": true,
+    "fail_closed": true
+  },
   "safety": {
     "private_vpx_modified": false,
     "vpinfe_used": false,
@@ -31,4 +42,3 @@
     "tables_must_be_inside": "tables-test"
   }
 }
-
