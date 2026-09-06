@@ -125,6 +125,13 @@ chroot "$MASTER" bash -c '
     # pas de prompt grub (aucun disque a amorcer dans un chroot)
     echo "grub-pc grub-pc/install_devices_empty boolean true" | debconf-set-selections
     echo "grub-pc grub-pc/install_devices string"             | debconf-set-selections
+    # PINCABOS_RECETTE_IDEMPOTENTE_V2 : sur un master deja construit, les metapaquets
+    # du noyau sont bloques — par l etape 80 de l ISO, qui fige le noyau du live, et
+    # par la maintenance noyau d un cabinet. apt refuse alors tout le manifeste :
+    # « Held packages were changed and -y was used without --allow-change-held-packages ».
+    # La recette pose l ensemble du systeme : elle leve ces blocages, et l ISO les
+    # reposera sur son rootfs live. Sans effet sur une base fraiche.
+    apt-mark unhold linux-generic linux-image-generic linux-headers-generic >/dev/null 2>&1 || true
     xargs -a /tmp/pkglist.txt apt-get install -y -qq \
         -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 '

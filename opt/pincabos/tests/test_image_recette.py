@@ -170,6 +170,17 @@ class RecetteIdempotente(unittest.TestCase):
         self.assertIn("--max-time", ligne)
         self.assertIn("--retry", ligne)
 
+    def test_blocages_de_paquets_leves(self):
+        """PINCABOS_RECETTE_IDEMPOTENTE_V2 : sur un master deja construit, les metapaquets
+        du noyau sont bloques (etape 80 de l ISO, maintenance noyau) et apt refuse alors
+        tout le manifeste. La recette les libere ; l ISO les rebloquera sur le live."""
+        self.assertIn("apt-mark unhold linux-generic linux-image-generic linux-headers-generic", self.script)
+        # avant l installation du manifeste, sinon le refus tombe quand meme
+        self.assertLess(self.script.index("apt-mark unhold"), self.script.index("xargs -a /tmp/pkglist.txt"))
+        # et l ISO continue de figer le noyau de son rootfs live
+        etape = (R / "opt/pincabos/script/iso/80-live-rootfs.sh").read_text(encoding="utf-8")
+        self.assertIn("apt-mark hold linux-generic linux-image-generic linux-headers-generic", etape)
+
     def test_syntaxe(self):
         self.assertEqual(subprocess.run(["bash", "-n", str(R / "opt/pincabos/script/build-master.sh")]).returncode, 0)
 
