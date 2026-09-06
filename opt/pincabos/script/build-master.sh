@@ -23,6 +23,12 @@
 set -Eeuo pipefail
 
 MASTER="${1:?usage: build-master.sh /chemin/du/master [/chemin/du/depot]}"
+
+# PINCABOS_RECETTE_IDEMPOTENTE_V1 : la recette tourne sans personne devant. Toute
+# commande qui poserait une question lit alors une fin de fichier et echoue, au
+# lieu d attendre indefiniment une reponse (le blocage est bien plus couteux
+# qu une erreur : il est invisible).
+exec < /dev/null
 REPO="${2:-$(cd "$(dirname "$0")/../../.." && pwd)}"
 SUITE="resolute"          # Ubuntu 26.04
 MIRROR="http://archive.ubuntu.com/ubuntu"
@@ -94,8 +100,13 @@ chroot "$MASTER" bash -c '
     apt-get update -qq
     apt-get install -y -qq curl ca-certificates gpg >/dev/null
     install -d -m 0755 /etc/apt/keyrings
-    curl -fsSL https://dl.google.com/linux/linux_signing_key.pub \
-        | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg
+    # PINCABOS_RECETTE_IDEMPOTENTE_V1 : sans --batch --yes, gpg demande
+    # « File exists. Overwrite? (y/N) » des que la cle est deja la, c est-a-dire
+    # a CHAQUE reconstruction sur un master existant. Il attendait alors une
+    # reponse qui ne venait jamais : la recette restait bloquee a l etape B,
+    # sans message et sans fin (nuit du 07/09/2026, cinq constructions perdues).
+    curl -fsSL --retry 3 --max-time 60 https://dl.google.com/linux/linux_signing_key.pub \
+        | gpg --batch --yes --dearmor -o /etc/apt/keyrings/google-chrome.gpg
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] https://dl.google.com/linux/chrome/deb/ stable main" \
         > /etc/apt/sources.list.d/google-chrome.list
     apt-get update -qq

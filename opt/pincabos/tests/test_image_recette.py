@@ -5,6 +5,7 @@ import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tarfile
 import tempfile
@@ -138,6 +139,39 @@ class Pose(unittest.TestCase):
         self.assertEqual(self.appels, [])
         self.assertFalse((self.rootfs / "opt/pinball/vpinfe").exists())
         self.assertTrue(all(not l.startswith("NOGO") for l in j), j)
+
+
+class RecetteIdempotente(unittest.TestCase):
+    """PINCABOS_RECETTE_IDEMPOTENTE_V1 — build-master.sh doit pouvoir etre relance.
+
+    Nuit du 07/09/2026 : cinq constructions d'ISO de suite sont restees bloquees a
+    l'etape des paquets, sans message. La cause : `gpg --dearmor -o cle.gpg` sans
+    `--batch --yes` demande « File exists. Overwrite? (y/N) » des que la cle est
+    deja posee — donc a chaque reconstruction sur un master existant — et attendait
+    une reponse qui ne venait jamais. Un blocage muet coute bien plus cher qu'une
+    erreur : la recette n'a plus d'entree du tout.
+    """
+
+    def setUp(self):
+        self.script = (R / "opt/pincabos/script/build-master.sh").read_text(encoding="utf-8")
+
+    def test_gpg_ne_pose_pas_de_question(self):
+        self.assertIn("gpg --batch --yes --dearmor", self.script)
+        self.assertNotIn("| gpg --dearmor", self.script)
+
+    def test_aucune_entree_possible(self):
+        self.assertIn("exec < /dev/null", self.script)
+        # pose tot : avant la premiere commande qui pourrait interroger
+        self.assertLess(self.script.index("exec < /dev/null"), self.script.index("apt-get"))
+
+    def test_telechargement_borne(self):
+        """Une cle qui ne repond pas ne doit pas retenir la recette non plus."""
+        ligne = next(l for l in self.script.splitlines() if "linux_signing_key" in l)
+        self.assertIn("--max-time", ligne)
+        self.assertIn("--retry", ligne)
+
+    def test_syntaxe(self):
+        self.assertEqual(subprocess.run(["bash", "-n", str(R / "opt/pincabos/script/build-master.sh")]).returncode, 0)
 
 
 if __name__ == "__main__":
