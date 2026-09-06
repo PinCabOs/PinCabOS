@@ -30,6 +30,9 @@ from datetime import datetime
 from pathlib import Path
 
 CONFIG = Path("/opt/pincabos/config/audio-router.json")
+# PINCABOS_VPINFE_SON_APERCUS_V1 : le son des aperçus de tables dans VPinFE
+VPINFE_INI = Path("/home/pinball/.config/vpinfe/vpinfe.ini")
+MARQUEUR_SON_APERCUS = Path("/var/lib/pincabos/flags/vpinfe-son-apercus.done")
 VPX_INI = Path("/home/pinball/.pincabos/vpx/VPinballX.ini")
 VPX_LEGACY_INI = Path("/home/pinball/.local/share/VPinballX/10.8/VPinballX.ini")
 
@@ -454,6 +457,37 @@ def reactiver_sortie(sink: dict, run=executer) -> list:
                        f" ; remis à 100 % : {', '.join(pleins) or 'aucun'}"
                        f" ; déjà en place : {', '.join(intacts) or 'aucun'}")
     return journal
+
+
+def activer_son_apercus(vpinfe_ini: Path = VPINFE_INI, marqueur: Path = MARQUEUR_SON_APERCUS) -> str:
+    """PINCABOS_VPINFE_SON_APERCUS_V1 : VPinFE joue la bande-son des aperçus de tables
+    quand [Settings] muteaudio = false. Le modèle livré le dit déjà ; un cabinet mis à
+    jour garde son ancien fichier, où il valait true, et ses aperçus restaient muets.
+    On ne le pose qu'une fois (marqueur) : couper le son des aperçus reste un choix
+    que l'utilisateur peut faire ensuite, et que PinCabOS ne défait pas."""
+    if marqueur.is_file():
+        return ""
+    if not vpinfe_ini.is_file():
+        return ""
+    ini = pincabos_ini.Ini(vpinfe_ini.read_text(encoding="utf-8", errors="replace"))
+    if (ini.get("Settings", "muteaudio") or "").strip().lower() not in ("true", "1", "yes"):
+        _poser_marqueur(marqueur)
+        return ""
+    ini.poser("Settings", "muteaudio", "false", commentaire())
+    try:
+        pincabos_ini.ecrire(vpinfe_ini, ini)
+    except (OSError, ValueError) as exc:
+        return f"VPinFE : son des aperçus non activé ({exc})"
+    _poser_marqueur(marqueur)
+    return "VPinFE : son des aperçus de tables activé ([Settings] muteaudio = false)"
+
+
+def _poser_marqueur(marqueur: Path) -> None:
+    try:
+        marqueur.parent.mkdir(parents=True, exist_ok=True)
+        marqueur.write_text(datetime.now().isoformat(timespec="seconds") + chr(10), encoding="utf-8")
+    except OSError:
+        pass
 
 
 def appliquer_premier_demarrage(cfg: dict, run=executer, vpx_ini: Path = VPX_INI, vpx_legacy_ini: Path = VPX_LEGACY_INI) -> list:

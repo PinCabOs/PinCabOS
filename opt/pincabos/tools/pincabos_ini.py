@@ -21,12 +21,15 @@ Contrat :
 - l'écriture est atomique (fichier temporaire puis renommage), garde le mode,
   rend le fichier au joueur, et ne touche pas le disque si rien n'a changé.
 """
+import re
 import os
 import sys
 import tempfile
 from pathlib import Path
 
 MARQUE_COMMENTAIRE = "par PinCabOS fonction("
+# en-tete de section, pour reconnaitre un fichier colle sur une seule ligne
+_ENTETE = re.compile(r"\[[A-Za-z][A-Za-z0-9_. -]*\]")
 
 try:
     from pincabos_paths import PATHS
@@ -190,9 +193,24 @@ def lire(chemin) -> Ini:
     return Ini(chemin.read_text(encoding="utf-8", errors="replace")) if chemin.is_file() else Ini("")
 
 
+def est_aplati(texte: str) -> bool:
+    """Un INI dont une ligne porte plusieurs sections ET plusieurs affectations :
+    le fichier a ete colle sur une seule ligne (PINCABOS_INI_APLATI_V1) et plus
+    aucune section n'y est lisible. Une valeur qui contient des crochets n'en est pas.
+    """
+    for ligne in texte.split(chr(10)):
+        if len(_ENTETE.findall(ligne)) > 1 and ligne.count(" = ") > 1:
+            return True
+    return False
+
+
 def ecrire_texte(chemin, texte: str, proprietaire=(None, None)) -> bool:
     """Écriture atomique ; rien si identique ; mode conservé ; propriétaire (uid, gid) ou celui du joueur."""
     chemin = Path(chemin)
+    # PINCABOS_INI_APLATI_V1 : mieux vaut une erreur qu'un fichier de configuration detruit
+    if est_aplati(texte):
+        raise ValueError("INI aplati (plusieurs sections sur une ligne) : "
+                         + str(chemin) + " non ecrit - PINCABOS_INI_APLATI_V1")
     ancien = chemin.read_text(encoding="utf-8", errors="replace") if chemin.is_file() else None
     if ancien == texte:
         return False

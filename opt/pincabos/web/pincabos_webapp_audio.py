@@ -770,10 +770,16 @@ def audio_apply_to_vpx_vpinfe():
     vpinfe_home_ini = PINCABOS_VPINFE_INI
 
     def set_ini_key_native(lines, section, key, value):
-        # PINCABOS_INI_UNIQUE_V1 : delegue a l ecrivain INI unique (lignes avec leur fin de ligne)
-        ini = pincabos_ini.Ini("".join(lines))
+        # PINCABOS_INI_UNIQUE_V1 : delegue a l ecrivain INI unique.
+        # PINCABOS_INI_APLATI_V1 (cab de Yann, 06/09/2026 : « no tables found »)
+        # audio_read_lines() rend des lignes SANS fin de ligne (splitlines) : les
+        # coller avec "" ecrasait tout le fichier sur une seule ligne, ou plus
+        # aucune section n'etait reconnue. VPinFE, ne sachant plus le lire, le
+        # reecrivait avec ses valeurs par defaut : tablerootdir vide, plus une
+        # seule table. Meme convention des deux cotes : sans fin de ligne.
+        ini = pincabos_ini.Ini("\n".join(lines))
         ini.poser(section, key, value)
-        return [l + "\n" for l in ini.lignes]
+        return list(ini.lignes)
 
     results.append("VPX: SoundDevice/SoundDeviceBG/MusicDevice/Sound3DDevice non modifiés automatiquement.")
     results.append("Raison: VPX semble utiliser des IDs numériques dans [Player], pas hw:X,Y ALSA.")
