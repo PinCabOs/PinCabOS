@@ -750,6 +750,15 @@ def register(app, page, esc):
             shutil.chown(str(cab), user="pinball", group="pinball")
         except Exception:
             pass
+        # PINCABOS_DOF_GLOBALCONFIG_V1 : GlobalConfig a cote, et le PrefPath de VPX servi aussi
+        try:
+            import sys as _sys
+            if "/opt/pincabos/tools" not in _sys.path:
+                _sys.path.insert(0, "/opt/pincabos/tools")
+            import pincabos_dof as _pd
+            global_note = " ; ".join(_pd.propager_cabinet(d))
+        except Exception as e:   # la page ne doit pas tomber pour un dossier absent
+            global_note = "GlobalConfig DOF non pose : %s" % e
         restart_log = ""
         if request.form.get("restart_vpinfe") == "1":
             restart_log = _run(["systemctl", "restart", "pincabos-vpinfe.service"], timeout=30)
@@ -759,11 +768,12 @@ def register(app, page, esc):
   <table>
     <tr><td>Fichier</td><td><code>%s</code></td></tr>
     <tr><td>Sauvegarde</td><td><code>%s</code></td></tr>
+    <tr><td>GlobalConfig DOF</td><td><code>%s</code></td></tr>
     <tr><td>Redémarrage VPinFE</td><td><code>%s</code></td></tr>
   </table>
   <p><a class="button" href="/dof/hardware">Retour Matériel DOF</a>
      <a class="button secondary" href="/dof">Page DOF</a></p>
-</div>""" % (esc(str(cab)), esc(backup_note),
+</div>""" % (esc(str(cab)), esc(backup_note), esc(global_note),
              esc(restart_log.strip() or ("demandé" if request.form.get("restart_vpinfe") == "1" else "non demandé")))
         return page("Matériel DOF", body)
 

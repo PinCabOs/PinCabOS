@@ -6,6 +6,8 @@
                     d apres /opt/pincabos/config/dof/installer.json
   apply-toys-firstboot  genere cabinet.xml depuis hardware-inventory.json
                     (contrôleurs de rubans declares par l installeur)
+  global-config     pose GlobalConfig_B2SServer.xml a cote de chaque cabinet.xml
+                    (PINCABOS_DOF_GLOBALCONFIG_V1 : sans lui DOF ignore cabinet.xml)
 """
 import json
 import os
@@ -19,6 +21,8 @@ def main(argv):
     cmd = argv[1] if len(argv) > 1 else "detect"
     if cmd == "detect":
         print(json.dumps(pd.resume(pd.detecter()), indent=2, ensure_ascii=False)); return 0
+    if cmd == "global-config":
+        print("\n".join(pd.reparer_global_config())); return 0
     if cmd == "apply-toys-firstboot":
         inv = pd.charger(pd.INVENTAIRE)
         if not inv:

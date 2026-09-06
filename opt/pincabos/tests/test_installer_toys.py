@@ -95,15 +95,53 @@ class CabinetXml(unittest.TestCase):
                 dev["com_port"] = "/dev/ttyACM9"
             dossier = tmp / "directoutputconfig"; dossier.mkdir()
             (dossier / "cabinet.xml").write_text("<Cabinet/>", encoding="utf-8")
-            j = pd.appliquer_toys_premier_demarrage(inv, inventaire=tmp / "inv.json", dossier=dossier, sauvegardes=tmp / "bak", mod=mod)
+            vpx = tmp / ".pincabos/vpx/directoutputconfig"; vpx.mkdir(parents=True)   # le PrefPath de VPX
+            j = pd.appliquer_toys_premier_demarrage(inv, inventaire=tmp / "inv.json", dossier=dossier, sauvegardes=tmp / "bak", mod=mod,
+                                                    supplementaires=(vpx, tmp / "absent"))
             self.assertTrue((tmp / "inv.json").exists())
             self.assertIn("<TeensyStripController>", (dossier / "cabinet.xml").read_text(encoding="utf-8"))
             self.assertEqual(len(list((tmp / "bak").glob("cabinet.xml.bak-installer-*"))), 1)
-            self.assertEqual(len(j), 3)
+            # PINCABOS_DOF_GLOBALCONFIG_V1 : sans GlobalConfig, DOF n'aurait jamais lu ce cabinet.xml
+            gc = (dossier / "GlobalConfig_B2SServer.xml").read_text(encoding="utf-8")
+            self.assertIn(f"<CabinetConfigFilePattern>{dossier}/cabinet.xml</CabinetConfigFilePattern>", gc)
+            self.assertIn(f"<IniFilesPath>{dossier}</IniFilesPath>", gc)
+            self.assertNotIn("{GlobalConfigDir}", gc, "libdof ne connait pas cette variable : chemins absolus")
+            # le PrefPath de VPX recoit le meme cabinet.xml et son propre GlobalConfig
+            self.assertEqual((vpx / "cabinet.xml").read_bytes(), (dossier / "cabinet.xml").read_bytes())
+            self.assertIn(f"<CabinetConfigFilePattern>{vpx}/cabinet.xml<", (vpx / "GlobalConfig_B2SServer.xml").read_text(encoding="utf-8"))
+            self.assertEqual(len(j), 6, j)
             # sans controleur actif : inventaire seul
             inv2 = json.loads(json.dumps(inv)); [d.__setitem__("enabled", False) for d in inv2["devices"]]
             j = pd.appliquer_toys_premier_demarrage(inv2, inventaire=tmp / "inv2.json", dossier=dossier, sauvegardes=tmp / "bak", mod=mod)
             self.assertTrue(any("inchangé" in l for l in j))
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_global_config(self):
+        tmp = Path(tempfile.mkdtemp())
+        try:
+            d = tmp / "directoutputconfig"; d.mkdir(); (d / "cabinet.xml").write_text("<Cabinet/>", encoding="utf-8")
+            # un reglage de l'utilisateur qui designe deja un cabinet.xml est garde
+            perso = "<GlobalConfig><CabinetConfigFilePattern>/ailleurs/cabinet.xml</CabinetConfigFilePattern></GlobalConfig>"
+            (d / "GlobalConfig_B2SServer.xml").write_text(perso, encoding="utf-8")
+            self.assertIn("en place", pd.poser_global_config(d, tmp / "bak"))
+            self.assertEqual((d / "GlobalConfig_B2SServer.xml").read_text(encoding="utf-8"), perso)
+            # un fichier sans cabinet.xml (celui de DOF Windows, par exemple) est sauvegarde puis remplace
+            (d / "GlobalConfig_B2SServer.xml").write_text("<GlobalConfig/>", encoding="utf-8")
+            self.assertIn("pose", pd.poser_global_config(d, tmp / "bak"))
+            self.assertEqual(len(list((tmp / "bak").glob("GlobalConfig_B2SServer.xml.bak-*"))), 1)
+            self.assertIn(f"{d}/cabinet.xml", (d / "GlobalConfig_B2SServer.xml").read_text(encoding="utf-8"))
+            # la reparation (doctor, CLI) : chaque dossier avec cabinet.xml
+            autre = tmp / "vpx/directoutputconfig"; autre.mkdir(parents=True); (autre / "cabinet.xml").write_text("<Cabinet/>", encoding="utf-8")
+            j = pd.reparer_global_config(supplementaires=(d, autre), sauvegardes=tmp / "bak")
+            self.assertTrue((autre / "GlobalConfig_B2SServer.xml").is_file()); self.assertEqual(len(j), 2, j)
+            # le doctor et la CLI existent
+            self.assertIn("global-config", (R / "opt/pincabos/tools/pincabos-dof").read_text(encoding="utf-8"))
+            doc = R / "usr/local/libexec/pincabos/doctor.d/75-dof.sh"
+            self.assertIn("pincabos-dof global-config", doc.read_text(encoding="utf-8"))
+            import subprocess
+            self.assertEqual(subprocess.run(["bash", "-n", str(doc)]).returncode, 0)
+            self.assertIn("propager_cabinet", (R / "opt/pincabos/web/pincabos_dof_hardware.py").read_text(encoding="utf-8"))
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
