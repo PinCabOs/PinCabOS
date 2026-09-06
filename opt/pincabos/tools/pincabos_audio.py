@@ -402,23 +402,57 @@ COMMUTATEURS_ALSA = ("Master", "PCM", "Front", "Surround", "Center", "LFE", "Sid
 CANAUX_ALSA_PLEINS = ("PCM", "Front", "Surround", "Center", "LFE", "Side")
 
 
+def sink_muet(nom: str, texte: str) -> bool:
+    """Le sink `nom` est-il coupé (« Mute: yes ») dans `pactl list sinks` ?
+    Sink absent ou état inconnu : on répond « coupé », le mute sera levé (sans risque)."""
+    courant = None
+    for ligne in texte.splitlines():
+        s = ligne.strip()
+        if s.startswith("Name:"):
+            courant = s.split(":", 1)[1].strip()
+        elif courant == nom and s.startswith("Mute:"):
+            return s.split(":", 1)[1].strip() == "yes"
+    return True
+
+
 def reactiver_sortie(sink: dict, run=executer) -> list:
-    """Leve le mute PipeWire du sink et ouvre les commutateurs ALSA de sa carte."""
+    """Leve le mute PipeWire du sink et ouvre les commutateurs ALSA de sa carte.
+    PINCABOS_AUDIO_SANS_CRAQUEMENT_V1 : seulement ce qui est réellement coupé ou
+    baissé. Toucher un commutateur déjà ouvert ou un volume déjà plein fait claquer
+    les amplis à chaque rejeu (cab de Yann, 06/09)."""
     journal = []
     nom = str(sink.get("name") or "")
     if nom:
-        rc, out = run(commande_pinball(["/usr/bin/pactl", "set-sink-mute", nom, "0"]), timeout=10)
-        journal.append(f"mute PipeWire leve : {nom} ({'ok' if rc == 0 else out.strip()[-80:]})")
+        rc, etat = run(commande_pinball(["/usr/bin/pactl", "list", "sinks"]), timeout=10)
+        if rc == 0 and not sink_muet(nom, etat):
+            journal.append(f"sortie PipeWire ouverte : {nom}")
+        else:
+            rc, out = run(commande_pinball(["/usr/bin/pactl", "set-sink-mute", nom, "0"]), timeout=10)
+            journal.append(f"mute PipeWire leve : {nom} ({'ok' if rc == 0 else out.strip()[-80:]})")
     carte = str(sink.get("card") or "")
     if carte != "":
-        ouverts = []
+        ouverts, pleins, intacts = [], [], []
         for ctrl in COMMUTATEURS_ALSA:
-            rc, _ = run(["amixer", "-q", "-c", carte, "sset", ctrl, "unmute"], timeout=5)
-            if rc == 0:
-                ouverts.append(ctrl)
-                if ctrl in CANAUX_ALSA_PLEINS:
+            rc, etat = run(["amixer", "-c", carte, "sget", ctrl], timeout=5)
+            if rc != 0:
+                continue   # commutateur absent sur cette carte
+            touche = False
+            if "[on]" not in etat:   # coupé, ou état illisible : on ouvre (sans risque)
+                rc, _ = run(["amixer", "-q", "-c", carte, "sset", ctrl, "unmute"], timeout=5)
+                if rc == 0:
+                    ouverts.append(ctrl)
+                    touche = True
+            if ctrl in CANAUX_ALSA_PLEINS:
+                niveaux = re.findall(r"\[(\d+)%\]", etat)
+                if niveaux and any(int(n) < 100 for n in niveaux):
                     run(["amixer", "-q", "-c", carte, "sset", ctrl, "100%"], timeout=5)
-        journal.append(f"commutateurs ALSA carte {carte} ouverts : {', '.join(ouverts) or 'aucun'}")
+                    pleins.append(ctrl)
+                    touche = True
+            if not touche:
+                intacts.append(ctrl)
+        journal.append(f"commutateurs ALSA carte {carte} ouverts : {', '.join(ouverts) or 'aucun'}"
+                       f" ; remis à 100 % : {', '.join(pleins) or 'aucun'}"
+                       f" ; déjà en place : {', '.join(intacts) or 'aucun'}")
     return journal
 
 
