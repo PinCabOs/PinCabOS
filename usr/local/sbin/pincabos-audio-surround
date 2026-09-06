@@ -529,30 +529,115 @@ def cmd_apply_session() -> int:
     nom = str(config.get("card") or "")
     if not nom:
         return 0
-    resultat = pactl("set-card-profile", nom, profil)
-    if resultat.returncode != 0:
-        print(f"profil {profil} non rejoue : {resultat.stderr.strip()}")
+    # PINCABOS_AUDIO_SANS_CRAQUEMENT_V1 : la regle « jamais en veille » d abord ; si elle
+    # vient d etre posee, WirePlumber redemarre et on lui laisse le temps de revenir.
+    message = sans_veille()
+    if message:
+        print(message)
+        time.sleep(3)
+    ok, message = rejouer_profil(nom, profil)
+    if not ok:
+        print(message)
         return 1
     # PINCABOS_AUDIO_UNMUTE_V1 : un profil rejoue ne doit pas laisser la sortie coupee
     for ligne in reactiver_sinks_de_la_carte(nom):
         print(ligne)
-    print(f"GO: profil {profil} rejoue")
+    print(message)
     return 0
 
 
+def profil_actif(nom_carte: str, texte: str | None = None) -> str:
+    """Le profil actif de CETTE carte (« Active Profile: » de `pactl list cards`)."""
+    if texte is None:
+        res = pactl("list", "cards")
+        if res.returncode != 0:
+            return ""
+        texte = res.stdout
+    dans_carte = False
+    for ligne in texte.splitlines():
+        m = re.match(r"^\s*Name:\s*(\S+)", ligne)
+        if m:
+            dans_carte = m.group(1) == nom_carte
+            continue
+        if dans_carte:
+            m = re.match(r"^\s*Active Profile:\s*(\S+)", ligne)
+            if m:
+                return m.group(1)
+    return ""
+
+
+def rejouer_profil(nom_carte: str, profil: str) -> tuple[bool, str]:
+    """PINCABOS_AUDIO_SANS_CRAQUEMENT_V1 : un profil deja actif n'est pas rejoue.
+    Le reposer faisait fermer puis rouvrir la carte par PipeWire : reveil du codec,
+    claquement dans tous les amplis a chaque demarrage."""
+    if profil_actif(nom_carte) == profil:
+        return True, f"GO: profil {profil} deja actif, rien rejoue"
+    resultat = pactl("set-card-profile", nom_carte, profil)
+    if resultat.returncode != 0:
+        return False, f"profil {profil} non rejoue : {resultat.stderr.strip()}"
+    return True, f"GO: profil {profil} rejoue"
+
+
+def sinks_muets(texte: str) -> dict[str, bool]:
+    """{nom du sink: muet} depuis `pactl list sinks`."""
+    etat, courant = {}, None
+    for ligne in texte.splitlines():
+        m = re.match(r"^\s*Name:\s*(\S+)", ligne)
+        if m:
+            courant = m.group(1)
+            etat[courant] = False
+            continue
+        m = re.match(r"^\s*Mute:\s*(yes|no)", ligne)
+        if m and courant:
+            etat[courant] = m.group(1) == "yes"
+    return etat
+
+
 def reactiver_sinks_de_la_carte(nom_carte: str) -> list[str]:
-    """Leve le mute PipeWire des sinks de la carte (alsa_card.X -> alsa_output.X.*)."""
+    """Leve le mute PipeWire des sinks de la carte (alsa_card.X -> alsa_output.X.*),
+    seulement s'il est pose (PINCABOS_AUDIO_SANS_CRAQUEMENT_V1)."""
     suffixe = nom_carte.split(".", 1)[1] if "." in nom_carte else nom_carte
     lignes = []
-    res = pactl("list", "short", "sinks")
+    res = pactl("list", "sinks")
     if res.returncode != 0:
         return lignes
-    for l in res.stdout.splitlines():
-        champs = l.split("\t")
-        if len(champs) > 1 and suffixe and suffixe in champs[1]:
-            r = pactl("set-sink-mute", champs[1], "0")
-            lignes.append(f"mute leve : {champs[1]} ({'ok' if r.returncode == 0 else r.stderr.strip()[-60:]})")
+    for nom, muet in sinks_muets(res.stdout).items():
+        if not suffixe or suffixe not in nom:
+            continue
+        if not muet:
+            lignes.append(f"sortie ouverte : {nom}")
+            continue
+        r = pactl("set-sink-mute", nom, "0")
+        lignes.append(f"mute leve : {nom} ({'ok' if r.returncode == 0 else r.stderr.strip()[-60:]})")
     return lignes
+
+
+SANS_VEILLE_MODELE = Path("/opt/pincabos/templates/home/.config/wireplumber/wireplumber.conf.d/51-pincabos-sortie-sans-veille.conf")
+SANS_VEILLE_CIBLE = Path(f"/home/{SESSION_USER}/.config/wireplumber/wireplumber.conf.d/51-pincabos-sortie-sans-veille.conf")
+
+
+def sans_veille(modele: Path = SANS_VEILLE_MODELE, cible: Path = SANS_VEILLE_CIBLE,
+                redemarrer=None, uid: int = SESSION_UID, gid: int = SESSION_UID) -> str:
+    """PINCABOS_AUDIO_SANS_CRAQUEMENT_V1 : la regle WirePlumber « sortie jamais en veille »
+    est posee dans le compte du joueur si elle manque (un cabinet mis a jour), puis
+    WirePlumber est relance une seule fois pour la lire. Rien sur un cabinet a jour."""
+    if cible.is_file():
+        return ""
+    if not modele.is_file():
+        return f"WARN: modele absent {modele}"
+    cible.parent.mkdir(parents=True, exist_ok=True)
+    cible.write_text(modele.read_text(encoding="utf-8"), encoding="utf-8")
+    for p in (cible.parent.parent, cible.parent, cible):
+        try:
+            os.chown(p, uid, gid)
+        except OSError:
+            pass
+    if redemarrer is None:
+        redemarrer = lambda: systemctl_user("restart", "wireplumber")
+    r = redemarrer()
+    rc = getattr(r, "returncode", 0)
+    return f"GO: sortie sans veille posee ({cible.name}), WirePlumber relance" if rc == 0 \
+        else f"WARN: sortie sans veille posee, WirePlumber non relance ({getattr(r, 'stderr', '')})"
 
 
 def main() -> int:

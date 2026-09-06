@@ -294,16 +294,39 @@ class Audio(unittest.TestCase):
     def test_reactiver_sortie(self):
         # PINCABOS_AUDIO_UNMUTE_V1 (cab de Yann 06/09 : sink « Mute: yes », Front/Surround/Center/LFE off)
         appels = []
+        etat_sinks = "Sink #1\n\tName: alsa_output.pci-0000_00_1f.3.analog-surround-51\n\tMute: yes\n"
         def run(args, timeout=20, **kw):
             appels.append(list(args))
-            return (1, "") if args[:2] == ["amixer", "-q"] and args[5] == "Side" else (0, "")
+            if args[-2:] == ["list", "sinks"]:
+                return (0, etat_sinks)
+            if args[:1] == ["amixer"] and "sget" in args:
+                ctrl = args[-1]
+                if ctrl == "Side":
+                    return (1, "amixer: Unable to find simple control 'Side',0")
+                if ctrl in ("Master", "PCM"):
+                    return (0, "  Front Left: Playback 87 [100%] [on]\n  Front Right: Playback 87 [100%] [on]\n")
+                return (0, "  Front Left: Playback 0 [0%] [off]\n  Front Right: Playback 0 [0%] [off]\n")
+            return (0, "")
         j = pa.reactiver_sortie({"name": "alsa_output.pci-0000_00_1f.3.analog-surround-51", "card": "0"}, run=run)
-        self.assertEqual(appels[0][-3:], ["set-sink-mute", "alsa_output.pci-0000_00_1f.3.analog-surround-51", "0"])
         self.assertIn(["amixer", "-q", "-c", "0", "sset", "Front", "unmute"], appels)
         self.assertIn(["amixer", "-q", "-c", "0", "sset", "Front", "100%"], appels)
         self.assertNotIn(["amixer", "-q", "-c", "0", "sset", "Master", "100%"], appels)   # Master : volume du widget
+        self.assertNotIn(["amixer", "-q", "-c", "0", "sset", "Master", "unmute"], appels)  # deja ouvert : on n y touche pas
         self.assertNotIn(["amixer", "-q", "-c", "0", "sset", "Side", "100%"], appels)     # commutateur absent : pas de volume
         self.assertTrue(any("Front, Surround, Center, LFE" in l for l in j), j)
+        self.assertTrue(any("set-sink-mute" in " ".join(a) for a in appels), "sink coupe : mute leve")
+        # PINCABOS_AUDIO_SANS_CRAQUEMENT_V1 : tout deja en place -> aucune commande qui modifie
+        appels.clear(); etat_sinks = etat_sinks.replace("Mute: yes", "Mute: no")
+        def run2(args, timeout=20, **kw):
+            appels.append(list(args))
+            if args[-2:] == ["list", "sinks"]:
+                return (0, etat_sinks)
+            if "sget" in args:
+                return (0, "  Front Left: Playback 87 [100%] [on]\n")
+            return (0, "")
+        j = pa.reactiver_sortie({"name": "alsa_output.pci-0000_00_1f.3.analog-surround-51", "card": "0"}, run=run2)
+        self.assertFalse([a for a in appels if "sset" in a or "set-sink-mute" in a], appels)
+        self.assertTrue(any("ouverte" in l for l in j), j)
 
     def test_premier_demarrage(self):
         tmp = Path(tempfile.mkdtemp())
@@ -351,16 +374,39 @@ class Dof(unittest.TestCase):
     def test_reactiver_sortie(self):
         # PINCABOS_AUDIO_UNMUTE_V1 (cab de Yann 06/09 : sink « Mute: yes », Front/Surround/Center/LFE off)
         appels = []
+        etat_sinks = "Sink #1\n\tName: alsa_output.pci-0000_00_1f.3.analog-surround-51\n\tMute: yes\n"
         def run(args, timeout=20, **kw):
             appels.append(list(args))
-            return (1, "") if args[:2] == ["amixer", "-q"] and args[5] == "Side" else (0, "")
+            if args[-2:] == ["list", "sinks"]:
+                return (0, etat_sinks)
+            if args[:1] == ["amixer"] and "sget" in args:
+                ctrl = args[-1]
+                if ctrl == "Side":
+                    return (1, "amixer: Unable to find simple control 'Side',0")
+                if ctrl in ("Master", "PCM"):
+                    return (0, "  Front Left: Playback 87 [100%] [on]\n  Front Right: Playback 87 [100%] [on]\n")
+                return (0, "  Front Left: Playback 0 [0%] [off]\n  Front Right: Playback 0 [0%] [off]\n")
+            return (0, "")
         j = pa.reactiver_sortie({"name": "alsa_output.pci-0000_00_1f.3.analog-surround-51", "card": "0"}, run=run)
-        self.assertEqual(appels[0][-3:], ["set-sink-mute", "alsa_output.pci-0000_00_1f.3.analog-surround-51", "0"])
         self.assertIn(["amixer", "-q", "-c", "0", "sset", "Front", "unmute"], appels)
         self.assertIn(["amixer", "-q", "-c", "0", "sset", "Front", "100%"], appels)
         self.assertNotIn(["amixer", "-q", "-c", "0", "sset", "Master", "100%"], appels)   # Master : volume du widget
+        self.assertNotIn(["amixer", "-q", "-c", "0", "sset", "Master", "unmute"], appels)  # deja ouvert : on n y touche pas
         self.assertNotIn(["amixer", "-q", "-c", "0", "sset", "Side", "100%"], appels)     # commutateur absent : pas de volume
         self.assertTrue(any("Front, Surround, Center, LFE" in l for l in j), j)
+        self.assertTrue(any("set-sink-mute" in " ".join(a) for a in appels), "sink coupe : mute leve")
+        # PINCABOS_AUDIO_SANS_CRAQUEMENT_V1 : tout deja en place -> aucune commande qui modifie
+        appels.clear(); etat_sinks = etat_sinks.replace("Mute: yes", "Mute: no")
+        def run2(args, timeout=20, **kw):
+            appels.append(list(args))
+            if args[-2:] == ["list", "sinks"]:
+                return (0, etat_sinks)
+            if "sget" in args:
+                return (0, "  Front Left: Playback 87 [100%] [on]\n")
+            return (0, "")
+        j = pa.reactiver_sortie({"name": "alsa_output.pci-0000_00_1f.3.analog-surround-51", "card": "0"}, run=run2)
+        self.assertFalse([a for a in appels if "sset" in a or "set-sink-mute" in a], appels)
+        self.assertTrue(any("ouverte" in l for l in j), j)
 
     def test_premier_demarrage(self):
         tmp = Path(tempfile.mkdtemp())
