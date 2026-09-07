@@ -12,7 +12,7 @@ exec /usr/sbin/runuser -u "$PCO_USER" -- /usr/bin/env -u LD_PRELOAD \
   XAUTHORITY="$PCO_XAUTHORITY" \
   XDG_RUNTIME_DIR="$PCO_RUNTIME_DIR" \
   DBUS_SESSION_BUS_ADDRESS="$PCO_DBUS_ADDRESS" \
-  LD_LIBRARY_PATH=/opt/pincabos/overlays/vpinfe-dof-ledwiz-hidraw-stable \
-  VPINFE_DOF_DIR=/opt/pincabos/overlays/vpinfe-dof-ledwiz-hidraw-stable \
+  LD_LIBRARY_PATH=/opt/pincabos/overlays/libdof-canonical \
+  VPINFE_DOF_DIR=/opt/pincabos/overlays/libdof-canonical \
   LIBDOF_LEDWIZ_HIDAPI_LIBUSB=/usr/lib/x86_64-linux-gnu/libhidapi-libusb.so.0 \
   "$PCO_VPINFE_BIN"
