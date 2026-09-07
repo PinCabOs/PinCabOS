@@ -1,0 +1,26 @@
+[Unit]
+Description=PinCabOS PinCabShare V2 — SMB LAN permanent + Lobby-gated CAB mesh
+After=network-online.target avahi-daemon.service smbd.service pincabos-multiplayer-agent.service
+Wants=network-online.target avahi-daemon.service smbd.service
+Requires=pincabos-multiplayer-agent.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/usr/bin/python3 /opt/pincabos/apps/PinCabShare/pincabshare.py
+ExecStopPost=/usr/bin/python3 /opt/pincabos/apps/PinCabShare/close_intercab.py
+Restart=always
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=15
+NoNewPrivileges=true
+
+# IMPORTANT: ne pas activer ProtectSystem/PrivateTmp/PrivateMounts ici.
+# Le daemon monte les partages CIFS dans /run/pincabshare/mounts et ces mounts
+# doivent rester visibles dans le namespace du cabinet pour les liens de
+# /home/pinball/PinCabShare.
+
+[Install]
+WantedBy=multi-user.target
