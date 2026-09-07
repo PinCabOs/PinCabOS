@@ -1,6 +1,6 @@
 # Tests PinCabShare V2
 
-Tests ciblés :
+Exécution ciblée :
 
 ```bash
 python3 -m unittest discover -s /opt/pincabos/apps/PinCabShare/tests -p 'test_*.py' -v
@@ -8,10 +8,16 @@ python3 -m unittest discover -s /opt/pincabos/apps/PinCabShare/tests -p 'test_*.
 
 Couverture principale :
 
-- gate serveur valide ;
-- serveur inaccessible => inter-CAB fermé ;
-- gate désactivé/expiré/trop lointain => fermé ;
-- mauvais session/room/nonce => fermé ;
+- gate `open` valide avec 2 CAB ;
+- gate serveur `closed` => fermeture immédiate ;
+- TTL court obligatoire ;
+- gate expiré/trop lointain => fermé ;
 - CAB local absent ou membre dupliqué => fermé ;
-- client HTTPS obligatoire ;
-- authentification `PinCabOS-Device` utilisée sans exposer le token.
+- `share_nonce` invalide => fermé ;
+- compatibilité avec l'alias live sans `expires_at` ;
+- HTTPS obligatoire ;
+- identité `PinCabOS-Device` utilisée sans exposer le token ;
+- fallback `/api/device/pincabshare/state` -> `/api/device/multiplayer/share-gate` sur 404 ;
+- les liens gérés sont supprimés au close, mais un dossier réel ou un symlink non géré n'est jamais détruit.
+
+Les tests unitaires ne montent pas de NFS réel et ne touchent ni VPX, ni BGFX, ni VPinFE.
