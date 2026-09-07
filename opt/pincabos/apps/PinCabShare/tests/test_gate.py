@@ -17,29 +17,29 @@ spec.loader.exec_module(p)
 
 class GateTests(unittest.TestCase):
     def setUp(self):
-        self.original_fetch = p.fetch_wrapped_gate
-        self.original_future = p.MAX_GATE_FUTURE_SECONDS
-        p.MAX_GATE_FUTURE_SECONDS = 30
+        self.original_fetch = p.fetch_gate
         self.now = time.time()
 
     def tearDown(self):
-        p.fetch_wrapped_gate = self.original_fetch
-        p.MAX_GATE_FUTURE_SECONDS = self.original_future
+        p.fetch_gate = self.original_fetch
 
-    def payload(self, *, expires_delta=10):
-        expiry = datetime.fromtimestamp(
-            self.now + expires_delta,
-            timezone.utc,
-        ).isoformat()
-        gate = {
+    def payload(self, *, expires_delta=7):
+        return {
+            "ok": True,
             "schema": "pincabshare-gate/v2",
             "enabled": True,
-            "reason": "same_lobby_presence_fresh",
+            "share_allowed": True,
+            "gate": "open",
+            "reason": "authorized",
             "session_id": "mp-1",
             "room_code": "ABC123",
             "share_nonce": "a" * 64,
             "local_cabinet_id": 1,
-            "expires_at": expiry,
+            "gate_ttl_seconds": 8,
+            "expires_at": datetime.fromtimestamp(
+                self.now + expires_delta,
+                timezone.utc,
+            ).isoformat(),
             "members": [
                 {
                     "cabinet_id": 1,
@@ -53,66 +53,48 @@ class GateTests(unittest.TestCase):
                 },
             ],
         }
-        return {
-            "ok": True,
-            "session": {
-                "session_id": "mp-1",
-                "room_code": "ABC123",
-                "is_this_cabinet_member": True,
-            },
-            "pincabshare": gate,
-        }
 
     def use(self, value):
-        p.fetch_wrapped_gate = lambda: value
+        p.fetch_gate = lambda **_kwargs: value
 
     def test_valid_gate(self):
         self.use(self.payload())
         gate = p.load_gate(now=self.now)
         self.assertEqual(gate.authorized_ids, {1, 10})
         self.assertEqual(gate.local_label, "Alpha — CAB1")
+        self.assertEqual(gate.gate_ttl_seconds, 8)
+        self.assertEqual(len(gate.session_hash), 16)
+        self.assertEqual(len(gate.gate_tag), 16)
 
-    def test_disabled_gate_is_closed(self):
+    def test_server_closed_gate_is_immediate_close(self):
         value = self.payload()
-        value["pincabshare"]["enabled"] = False
-        value["pincabshare"]["reason"] = "local_lobby_presence_stale"
+        value["enabled"] = False
+        value["share_allowed"] = False
+        value["gate"] = "closed"
+        value["reason"] = "not_enough_present_cabinets"
         self.use(value)
-        with self.assertRaisesRegex(p.GateError, "local_lobby_presence_stale"):
-            p.load_gate(now=self.now)
-
-    def test_wrong_session_is_closed(self):
-        value = self.payload()
-        value["pincabshare"]["session_id"] = "mp-2"
-        self.use(value)
-        with self.assertRaisesRegex(p.GateError, "session_mismatch"):
-            p.load_gate(now=self.now)
-
-    def test_wrong_room_is_closed(self):
-        value = self.payload()
-        value["pincabshare"]["room_code"] = "ZZZZ99"
-        self.use(value)
-        with self.assertRaisesRegex(p.GateError, "room_mismatch"):
-            p.load_gate(now=self.now)
-
-    def test_invalid_nonce_is_closed(self):
-        value = self.payload()
-        value["pincabshare"]["share_nonce"] = "not-a-server-nonce"
-        self.use(value)
-        with self.assertRaisesRegex(p.GateError, "nonce_invalid"):
+        with self.assertRaisesRegex(p.GateClosed, "not_enough_present_cabinets"):
             p.load_gate(now=self.now)
 
     def test_local_cabinet_must_be_member(self):
         value = self.payload()
-        value["pincabshare"]["local_cabinet_id"] = 77
+        value["local_cabinet_id"] = 77
         self.use(value)
         with self.assertRaisesRegex(p.GateError, "local_cabinet_not_member"):
             p.load_gate(now=self.now)
 
     def test_duplicate_member_is_closed(self):
         value = self.payload()
-        value["pincabshare"]["members"][1]["cabinet_id"] = 1
+        value["members"][1]["cabinet_id"] = 1
         self.use(value)
         with self.assertRaisesRegex(p.GateError, "member_id_duplicate"):
+            p.load_gate(now=self.now)
+
+    def test_invalid_nonce_is_closed(self):
+        value = self.payload()
+        value["share_nonce"] = "not-a-nonce"
+        self.use(value)
+        with self.assertRaisesRegex(p.GateError, "share_nonce_invalid"):
             p.load_gate(now=self.now)
 
     def test_expired_gate_is_closed(self):
@@ -120,17 +102,35 @@ class GateTests(unittest.TestCase):
         with self.assertRaisesRegex(p.GateError, "gate_expired"):
             p.load_gate(now=self.now)
 
+    def test_gate_ttl_above_fail_closed_limit_is_rejected(self):
+        value = self.payload()
+        value["gate_ttl_seconds"] = 30
+        self.use(value)
+        with self.assertRaisesRegex(p.GateError, "gate_ttl_invalid"):
+            p.load_gate(now=self.now)
+
     def test_gate_too_far_in_future_is_closed(self):
-        self.use(self.payload(expires_delta=120))
+        self.use(self.payload(expires_delta=30))
         with self.assertRaisesRegex(p.GateError, "gate_expiry_too_far"):
             p.load_gate(now=self.now)
 
-    def test_server_failure_is_closed(self):
-        def fail():
+    def test_live_compatibility_alias_without_expires_at_uses_short_ttl(self):
+        value = self.payload()
+        value.pop("expires_at")
+        value.pop("schema")
+        value.pop("share_nonce")
+        self.use(value)
+        gate = p.load_gate(now=self.now)
+        self.assertGreater(gate.expires_at, self.now)
+        self.assertLessEqual(gate.expires_at, self.now + 8)
+        self.assertEqual(gate.gate_tag, "")
+
+    def test_server_failure_is_propagated_for_lease_logic(self):
+        def fail(**_kwargs):
             raise p.GateClientError("server_unreachable")
 
-        p.fetch_wrapped_gate = fail
-        with self.assertRaisesRegex(p.GateError, "gate_server:server_unreachable"):
+        p.fetch_gate = fail
+        with self.assertRaisesRegex(p.GateClientError, "server_unreachable"):
             p.load_gate(now=self.now)
 
 
