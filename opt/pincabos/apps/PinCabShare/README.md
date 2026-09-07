@@ -1,12 +1,32 @@
-# PinCabShare V2
+# PinCab Links / PinCabShare V2
 
-PinCabShare V2 est le partage automatique de fichiers entre les cabinets PinCabOS présents **dans le même Lobby Multiplayer réel**.
+## Séparation utilisateur
 
-Il n'existe **aucun partage PinCabShare permanent sur le LAN**. La simple présence sur le même réseau, Avahi/mDNS ou une ancienne session Multiplayer ne suffit jamais à ouvrir le partage.
+Deux fonctions distinctes coexistent dans PinCab Explorer :
+
+- **PinCabShare** : partage SMB historique du cabinet, conservé sur `/home/pinball/Share` ;
+- **PinCab Links** : raccourcis CAB↔CAB dynamiques affichés directement dans le menu quand 2 à 4 cabinets sont autorisés dans le même Lobby Multiplayer réel.
+
+La couche dynamique utilise toujours le runtime interne `pincabshare-v2`, mais son nom utilisateur est **PinCab Links**.
 
 ## Vue utilisateur
 
-Quand CAB1 et CAB10 sont tous les deux autorisés par le gate serveur :
+Dans un Lobby autorisé CAB1 + CAB10, PinCab Explorer affiche directement :
+
+```text
+PinCabShare
+PinCab Links
+  Ultimate PinCabOS — CAB1
+  VMCABOS — CAB10
+```
+
+`PinCabShare` ouvre :
+
+```text
+/home/pinball/Share
+```
+
+Les raccourcis de `PinCab Links` proviennent de la vue dynamique :
 
 ```text
 /home/pinball/PinCabShare/
@@ -14,9 +34,9 @@ Quand CAB1 et CAB10 sont tous les deux autorisés par le gate serveur :
 └── VMCABOS — CAB10         -> /run/pincabshare-v2/mounts/CAB10
 ```
 
-Les labels viennent de `pincabos.cc` (`cabinet_name + CAB##`). Aucun dossier CAB ne doit être créé manuellement.
+Les labels viennent de `pincabos.cc` (`cabinet_name + CAB##`). Aucun dossier CAB n'est créé manuellement.
 
-Quand le gate est fermé, `/home/pinball/PinCabShare` reste vide. Les données locales demeurent intactes dans :
+Quand le gate ferme, les raccourcis PinCab Links disparaissent. Les données locales demeurent intactes dans :
 
 ```text
 /srv/pincabshare/data
@@ -48,16 +68,16 @@ Le gate doit confirmer simultanément :
 - correspondance exacte user ↔ CAB ;
 - membership réel du user dans la room Lobby exacte liée à la session ;
 - room Lobby active ;
-- présence CAB PinCabShare fraîche ;
+- bail CAB PinCab Links frais ;
 - 2 à 4 CAB présents ;
 - CAB local inclus dans le groupe ;
 - bail court valide (maximum accepté côté client : 12 s).
 
-La fraîcheur d'un onglet navigateur n'est pas utilisée comme autorité. Le CAB authentifié entretient lui-même son bail device en pollant le gate. Quitter la room retire le membership; perdre le CAB ou le daemon fait expirer le bail rapidement.
+La fraîcheur d'un onglet navigateur n'est pas utilisée comme autorité. Le CAB authentifié entretient lui-même son bail device en pollant le gate. Quitter la room retire le membership ; perdre le CAB ou le daemon fait expirer le bail rapidement.
 
-## Transport
+## Transport PinCab Links
 
-PinCabShare V2 utilise :
+PinCab Links utilise :
 
 - **HTTPS** : autorisation et liste des CAB ;
 - **Avahi/mDNS** `_pincabshare._tcp` : découverte IPv4 uniquement ;
@@ -78,9 +98,11 @@ Le fichier suivant n'existe que pendant un gate ouvert et seulement pour les IPv
 /etc/exports.d/pincabshare-v2.exports
 ```
 
-Il n'y a jamais d'export `/24`, `/16`, RFC1918 global ou `*`.
+Il n'y a jamais d'export `/24`, `/16`, RFC1918 global ou `*` créé par PinCab Links.
 
 Le partage utilise `all_squash` avec l'UID/GID de `pinball`, `sync` et `no_subtree_check`.
+
+Le SMB historique `PinCabShare` reste séparé et n'est pas utilisé comme autorité ou transport du mode CAB↔CAB dynamique.
 
 ## Fail-closed
 
@@ -91,7 +113,8 @@ Un gate explicitement fermé provoque immédiatement :
 - retrait de `/etc/exports.d/pincabshare-v2.exports` ;
 - retrait de `/etc/avahi/services/pincabshare-v2.service` ;
 - démontage des NFS distants ;
-- retrait des symlinks CAB gérés dans `/home/pinball/PinCabShare`.
+- retrait des symlinks CAB gérés dans `/home/pinball/PinCabShare` ;
+- disparition des raccourcis correspondants sous **PinCab Links** au prochain rendu de PinCab Explorer.
 
 Les données de `/srv/pincabshare/data` ne sont jamais supprimées.
 
@@ -126,14 +149,29 @@ Status runtime :
 /run/pincabshare-v2/status.json
 ```
 
+Patch WebApp idempotent :
+
+```text
+/opt/pincabos/apps/PinCabShare/webapp_patch.py
+```
+
+## Validation réelle CAB1 ↔ CAB10
+
+Validé en test live :
+
+- gate `open` des deux côtés ;
+- `authorized_ids=[1,10]` ;
+- découverte mDNS IPv4 CAB1 `.237` ↔ CAB10 `.142` ;
+- export NFS limité à l'IP exacte du pair ;
+- montage NFS CAB1 ↔ CAB10 ;
+- labels réels `Ultimate PinCabOS — CAB1` et `VMCABOS — CAB10` créés dans la vue dynamique.
+
 ## Frontières non négociables
 
-PinCabShare V2 ne modifie pas :
+PinCab Links / PinCabShare V2 ne modifie pas :
 
 - VPX privé ;
 - BGFX privé ;
 - VPinFE ;
 - les tables ;
 - le moteur de lancement Multiplayer.
-
-Le mode jeu Multiplayer doit rester en pause jusqu'à validation réelle CAB1↔CAB10 : gate `open`, dossiers visibles dans les deux sens, écriture bidirectionnelle et fermeture automatique quand un joueur quitte le Lobby.
