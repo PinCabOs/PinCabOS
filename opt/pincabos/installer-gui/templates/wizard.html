@@ -743,11 +743,18 @@ function fillSummary(){
   document.getElementById("summary").innerHTML=rows.map(([k,v])=>
     `<div class="sumline"><span>${k}</span><b>${v}</b></div>`).join("");
   document.getElementById("confirm-dev").textContent=S.disk;
-  // Une mise a jour n'efface rien : le message d'effacement serait faux.
+  // PINCABOS_INSTALLEUR_CONFIRMATION_V2 — remontee de Patrick (07/09/2026) :
+  // seul l'effacement total (mode 1) efface. La mise a jour reinstalle par
+  // dessus, le dualboot se contente de l'espace libre : leur annoncer la perte
+  // de toutes les donnees, c'est faire renoncer a l'installation qu'ils ont
+  // justement choisie pour ne rien perdre.
   const box=document.querySelector("#st-confirm .danger-box");
   const warn=box?box.querySelector("[data-i18n=confirm_warn]"):null;
-  if(warn){warn.textContent=t(S.mode==3?"confirm_warn_up":"confirm_warn");}
-  if(box){box.classList.toggle("soft",S.mode==3);}}
+  const cle=S.mode==3?"confirm_warn_up":S.mode==2?"confirm_warn_dual":"confirm_warn";
+  if(warn){warn.textContent=t(cle);}
+  if(box){box.classList.toggle("soft",S.mode!=1);}
+  const titre=document.querySelector("#st-confirm h2");
+  if(titre){titre.textContent=t(S.mode==1?"confirm_title":"confirm_title_keep");}}
 document.getElementById("confirm-input").oninput=e=>{
   document.getElementById("btn-install").disabled=
     e.target.value.trim().toUpperCase()!=="INSTALL PINCABOS"};

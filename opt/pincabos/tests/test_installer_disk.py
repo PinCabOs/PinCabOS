@@ -103,5 +103,32 @@ class I18n(unittest.TestCase):
                 self.assertIn(k, keys, f"{lang}: {k}")
 
 
+class Confirmation(unittest.TestCase):
+    """PINCABOS_INSTALLEUR_CONFIRMATION_V2 — remontee de Patrick (07/09/2026).
+
+    Seul le mode 1 efface le disque. La derniere etape annoncait pourtant
+    « TOUTES LES DONNEES SERONT EFFACEES » dans les trois modes : le dualboot
+    et la mise a jour, choisis justement pour ne rien perdre, faisaient peur.
+    """
+
+    def setUp(self):
+        self.html = Path(RACINE, "opt/pincabos/installer-gui/templates/wizard.html").read_text(encoding="utf-8")
+        self.i18n = json.loads((R / "opt/pincabos/installer-gui/i18n.json").read_text(encoding="utf-8"))
+
+    def test_un_message_par_mode(self):
+        self.assertIn('S.mode==3?"confirm_warn_up":S.mode==2?"confirm_warn_dual":"confirm_warn"', self.html)
+        # le rouge d alerte ne reste que sur l effacement total
+        self.assertIn('box.classList.toggle("soft",S.mode!=1)', self.html)
+        self.assertIn('t(S.mode==1?"confirm_title":"confirm_title_keep")', self.html)
+
+    def test_traductions_completes(self):
+        for lang, cles in self.i18n.items():
+            for k in ("confirm_warn", "confirm_warn_up", "confirm_warn_dual",
+                      "confirm_title", "confirm_title_keep"):
+                self.assertIn(k, cles, f"{lang}: {k}")
+            self.assertNotEqual(cles["confirm_warn_dual"], cles["confirm_warn"], lang)
+            self.assertNotEqual(cles["confirm_title_keep"], cles["confirm_title"], lang)
+
+
 if __name__ == "__main__":
     unittest.main()
