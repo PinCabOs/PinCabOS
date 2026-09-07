@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Client HTTPS minimal pour le gate PinCabShare V2.
+"""Client HTTPS minimal du gate PinCabShare V2.
 
-Ce module utilise uniquement l'identité PinCabOS Link déjà provisionnée sur le
-cabinet. Il ne dépend pas du runtime VPX et ne modifie aucun état Multiplayer.
+Réutilise exclusivement l'identité PinCabOS Link déjà provisionnée dans
+/var/lib/pincabos-link/device.json. Aucun nouveau secret n'est créé.
 """
 from __future__ import annotations
 
@@ -15,12 +15,15 @@ from urllib.request import Request, urlopen
 
 DEFAULT_API = "https://pincabos.cc"
 DEFAULT_DEVICE_STATE = Path("/var/lib/pincabos-link/device.json")
-ENDPOINT = "/api/device/pincabshare/state"
+ENDPOINTS = (
+    "/api/device/pincabshare/state",
+    "/api/device/multiplayer/share-gate",
+)
 MAX_RESPONSE_BYTES = 128 * 1024
 
 
 class GateClientError(RuntimeError):
-    """Erreur réseau/auth sûre; ne contient jamais le jeton device."""
+    """Erreur sûre pour le journal; le token device n'est jamais inclus."""
 
 
 def load_credentials(path: Path = DEFAULT_DEVICE_STATE) -> tuple[str, str]:
@@ -34,15 +37,72 @@ def load_credentials(path: Path = DEFAULT_DEVICE_STATE) -> tuple[str, str]:
 
     token = payload.get("device_token")
     token_type = payload.get("token_type") or "PinCabOS-Device"
+    cabinet = payload.get("cabinet") or {}
+    cabinet_uuid = cabinet.get("cabinet_uuid") if isinstance(cabinet, dict) else None
 
     if (
         not isinstance(token, str)
         or len(token) < 24
         or token_type != "PinCabOS-Device"
+        or not isinstance(cabinet_uuid, str)
+        or not cabinet_uuid
     ):
         raise GateClientError("pincabos_link_identity_invalid")
 
     return token_type, token
+
+
+def _request_gate(
+    root: str,
+    endpoint: str,
+    token_type: str,
+    token: str,
+    timeout: float,
+    opener,
+) -> dict:
+    request = Request(
+        root + endpoint,
+        method="GET",
+        headers={
+            "Accept": "application/json",
+            "Authorization": f"{token_type} {token}",
+            "Cache-Control": "no-cache",
+            "User-Agent": "PinCabOS-PinCabShare/2",
+        },
+    )
+
+    try:
+        with opener(
+            request,
+            timeout=timeout,
+            context=ssl.create_default_context(),
+        ) as response:
+            raw = response.read(MAX_RESPONSE_BYTES + 1)
+            status = int(response.status)
+    except HTTPError as exc:
+        raw = exc.read(MAX_RESPONSE_BYTES)
+        if exc.code == 404:
+            raise GateClientError("endpoint_not_found") from exc
+        try:
+            detail = json.loads(raw.decode("utf-8")).get("error")
+        except Exception:
+            detail = None
+        raise GateClientError(str(detail or f"server_http_{exc.code}")) from exc
+    except (URLError, TimeoutError, ssl.SSLError, OSError) as exc:
+        raise GateClientError("server_unreachable") from exc
+
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise GateClientError("server_response_too_large")
+    try:
+        value = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise GateClientError("server_response_invalid") from exc
+
+    if status < 200 or status >= 300 or not isinstance(value, dict):
+        raise GateClientError("server_response_invalid")
+    if value.get("ok") is not True:
+        raise GateClientError(str(value.get("error") or "server_rejected"))
+    return value
 
 
 def fetch_gate(
@@ -58,78 +118,28 @@ def fetch_gate(
 
     try:
         request_timeout = float(
-            timeout
-            if timeout is not None
-            else os.environ.get("PINCABSHARE_HTTP_TIMEOUT", "4")
+            timeout if timeout is not None else os.environ.get("PINCABSHARE_HTTP_TIMEOUT", "3")
         )
     except (TypeError, ValueError) as exc:
         raise GateClientError("timeout_invalid") from exc
+    request_timeout = max(1.0, min(request_timeout, 10.0))
 
-    request_timeout = max(1.0, min(request_timeout, 15.0))
     token_type, token = load_credentials(credentials_path)
+    last_error: GateClientError | None = None
 
-    request = Request(
-        root + ENDPOINT,
-        method="GET",
-        headers={
-            "Accept": "application/json",
-            "Authorization": f"{token_type} {token}",
-            "User-Agent": "PinCabOS-PinCabShare/2",
-        },
-    )
-
-    try:
-        with opener(
-            request,
-            timeout=request_timeout,
-            context=ssl.create_default_context(),
-        ) as response:
-            raw = response.read(MAX_RESPONSE_BYTES + 1)
-            status = int(response.status)
-    except HTTPError as exc:
-        raw = exc.read(MAX_RESPONSE_BYTES)
+    for endpoint in ENDPOINTS:
         try:
-            detail = json.loads(raw.decode("utf-8")).get("error")
-        except Exception:
-            detail = None
-        raise GateClientError(str(detail or f"server_http_{exc.code}")) from exc
-    except (URLError, TimeoutError, ssl.SSLError, OSError) as exc:
-        raise GateClientError("server_unreachable") from exc
+            return _request_gate(
+                root,
+                endpoint,
+                token_type,
+                token,
+                request_timeout,
+                opener,
+            )
+        except GateClientError as exc:
+            last_error = exc
+            if str(exc) != "endpoint_not_found":
+                raise
 
-    if len(raw) > MAX_RESPONSE_BYTES:
-        raise GateClientError("server_response_too_large")
-
-    try:
-        value = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError) as exc:
-        raise GateClientError("server_response_invalid") from exc
-
-    if status < 200 or status >= 300 or not isinstance(value, dict):
-        raise GateClientError("server_response_invalid")
-    if value.get("ok") is not True:
-        raise GateClientError(str(value.get("error") or "server_rejected"))
-
-    return value
-
-
-def fetch_wrapped_gate(**kwargs) -> dict:
-    """Adapte la réponse serveur au contrat interne du daemon PinCabShare.
-
-    Le serveur est l'autorité de membership. Quand ``enabled`` est vrai, le
-    serveur a déjà vérifié que le CAB authentifié appartient bien à la session,
-    que sa présence Lobby est fraîche et que 2 à 4 CAB sont présents.
-    """
-
-    gate = fetch_gate(**kwargs)
-    session_id = str(gate.get("session_id") or "")
-    room_code = str(gate.get("room_code") or "")
-
-    return {
-        "ok": True,
-        "session": {
-            "session_id": session_id,
-            "room_code": room_code,
-            "is_this_cabinet_member": bool(gate.get("enabled")),
-        },
-        "pincabshare": gate,
-    }
+    raise last_error or GateClientError("gate_endpoint_unavailable")
