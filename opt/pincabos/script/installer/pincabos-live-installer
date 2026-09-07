@@ -1218,6 +1218,30 @@ PY
     fi
 }
 
+purge_live_only_from_target() {
+  # PINCABOS_CIBLE_SANS_CASPER_V1
+  # Le systeme installe EST le rootfs live (casper/filesystem.squashfs) : il
+  # herite donc de casper, dont l unite casper-md5check verifie les sommes d un
+  # ISO qui n existe plus sur la cible. Elle echoue a chaque demarrage. On la
+  # retire avant la regeneration de l initrd, pour ne la refaire qu une fois.
+  local h="$TARGET"
+  [ -d "$h/usr/share/casper" ] || [ -e "$h/usr/lib/systemd/system/casper-md5check.service" ] || {
+    pco_info "casper absent de la cible : rien a purger"
+    return 0
+  }
+  chroot "$h" env DEBIAN_FRONTEND=noninteractive dpkg --purge --force-depends \
+    lupin-casper casper >/dev/null 2>&1 || true
+  # Ceinture et bretelles : si dpkg a echoue, l unite ne doit plus se declencher.
+  rm -f "$h"/etc/systemd/system/*.wants/casper*.service 2>/dev/null || true
+  if [ -e "$h/usr/lib/systemd/system/casper-md5check.service" ]; then
+    ln -sfn /dev/null "$h/etc/systemd/system/casper-md5check.service"
+    pco_warn "casper non purge : casper-md5check masque sur la cible"
+  else
+    rm -f "$h/etc/casper.conf" 2>/dev/null || true
+    pco_go "casper retire de la cible (plus de casper-md5check au demarrage)"
+  fi
+}
+
 ensure_target_vpx_link() {
     # PINCABOS_VPX_LINK_V1 : toute la chaine de lancement passe par /opt/pinball/vpx
     # (pincabos-paths.sh). Une image ou ce dossier manque installe un cab qui ne
@@ -1928,6 +1952,7 @@ install_payload() {
   apply_target_audio
   apply_target_dof
   apply_target_toys
+  purge_live_only_from_target
   refresh_target_initrd_for_orientation
 
   test -f "$TARGET/etc/pincabos/orientation.conf"

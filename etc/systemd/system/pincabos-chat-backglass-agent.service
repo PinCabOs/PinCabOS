@@ -1,6 +1,9 @@
 [Unit]
 Description=PinCabOS Chat BackGlass Agent
-After=network-online.target graphical.target pincabos-webapp.service
+# PINCABOS_UNITES_SANS_CYCLE_V1 : jamais « After=graphical.target » dans une
+# unite que graphical.target tire lui-meme. On nomme ce qu on attend vraiment :
+# la webapp qui sert le contenu, et le frontend qui tient les fenetres.
+After=network-online.target pincabos-webapp.service pincabos-vpinfe.service
 Wants=network-online.target
 
 [Service]
@@ -11,4 +14,4 @@ RestartSec=5
 NoNewPrivileges=true
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
