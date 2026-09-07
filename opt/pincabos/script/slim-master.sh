@@ -115,6 +115,20 @@ for f in "$M"/boot/vmlinuz-* "$M"/boot/initrd.img-* "$M"/boot/System.map-* "$M"/
   faire "rm -f '$f'"
 done
 
+# ------------------------------------------- 3bis) anciens bundles versionnes
+dire "3bis) Anciens bundles de runtime (avant PINCABOS_RUNTIME_ROTATION_V1)"
+# Le modele d avant nommait le dossier par sa version et posait un lien vpx
+# dessus. Sur un master reconstruit, la recette remplace le lien par un vrai
+# dossier vpx : l ancien bundle reste alors a cote, 372 Mo pour rien.
+trouve=0
+for d in "$M"/opt/pinball/VPinballX_BGFX-*/; do
+  [ -d "$d" ] || continue
+  trouve=1
+  echo "  bundle versionne : $(basename "${d%/}") ($(du -sh "$d" 2>/dev/null | cut -f1))"
+  faire "rm -rf '${d%/}'"
+done
+[ "$trouve" -eq 0 ] && echo "  aucun"
+
 # ---------------------------------------------- 4) documentation et langues
 dire "4) Documentation, pages de manuel, traductions"
 # Les fichiers copyright restent : l image est redistribuee.
