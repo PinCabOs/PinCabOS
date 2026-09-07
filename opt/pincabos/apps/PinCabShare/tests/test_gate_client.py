@@ -5,7 +5,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 
 ROOT = Path(__file__).resolve().parents[1]
 MODULE = ROOT / "gate_client.py"
@@ -56,14 +56,7 @@ class GateClientTests(unittest.TestCase):
             seen["authorization"] = request.headers.get("Authorization")
             seen["timeout"] = kwargs.get("timeout")
             seen["context"] = kwargs.get("context")
-            return FakeResponse(
-                {
-                    "ok": True,
-                    "schema": "pincabshare-gate/v2",
-                    "enabled": False,
-                    "reason": "not_enough_fresh_lobby_members",
-                }
-            )
+            return FakeResponse({"ok": True, "gate": "closed", "share_allowed": False})
 
         value = g.fetch_gate(
             api_root="https://pincabos.cc",
@@ -84,6 +77,25 @@ class GateClientTests(unittest.TestCase):
         self.assertEqual(seen["timeout"], 2.0)
         self.assertIsInstance(seen["context"], ssl.SSLContext)
 
+    def test_404_on_canonical_falls_back_to_live_alias(self):
+        seen = []
+
+        def opener(request, **_kwargs):
+            seen.append(request.full_url)
+            if request.full_url.endswith("/api/device/pincabshare/state"):
+                raise HTTPError(request.full_url, 404, "not found", {}, None)
+            return FakeResponse({"ok": True, "gate": "closed", "share_allowed": False})
+
+        value = g.fetch_gate(
+            api_root="https://pincabos.cc",
+            credentials_path=self.device,
+            opener=opener,
+        )
+
+        self.assertTrue(value["ok"])
+        self.assertEqual(len(seen), 2)
+        self.assertTrue(seen[1].endswith("/api/device/multiplayer/share-gate"))
+
     def test_plain_http_is_rejected(self):
         with self.assertRaisesRegex(g.GateClientError, "https_required"):
             g.fetch_gate(
@@ -102,23 +114,16 @@ class GateClientTests(unittest.TestCase):
                 opener=opener,
             )
 
-    def test_wrapped_gate_marks_membership_only_when_enabled(self):
-        original = g.fetch_gate
-        try:
-            g.fetch_gate = lambda **_kwargs: {
-                "ok": True,
-                "schema": "pincabshare-gate/v2",
-                "enabled": True,
-                "session_id": "mp-1",
-                "room_code": "ABC123",
-            }
-            wrapped = g.fetch_wrapped_gate()
-        finally:
-            g.fetch_gate = original
-
-        self.assertEqual(wrapped["session"]["session_id"], "mp-1")
-        self.assertEqual(wrapped["session"]["room_code"], "ABC123")
-        self.assertTrue(wrapped["session"]["is_this_cabinet_member"])
+    def test_invalid_device_identity_is_rejected(self):
+        self.device.write_text(
+            json.dumps({"token_type": "PinCabOS-Device", "device_token": "short"}),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(g.GateClientError, "pincabos_link_identity_invalid"):
+            g.fetch_gate(
+                credentials_path=self.device,
+                opener=lambda *_args, **_kwargs: None,
+            )
 
 
 if __name__ == "__main__":
