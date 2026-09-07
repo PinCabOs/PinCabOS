@@ -13,17 +13,30 @@ retiree `--delai` secondes apres l apparition d une NOUVELLE fenetre
 « VPinFE Table » (xdotool ; celles d avant un redemarrage ne comptent pas), ou au plus tard a `--max` secondes. Jamais bloquant : sans X, sans
 libX11 ou sans screens.json, on couvre l ecran entier ou on sort.
 
-PINCABOS_VOILE_VISUELS_V1 (Yann, 06/09/2026 : « laisser le loading affiche tant que
-VPinFE n est pas pret ») : le voile n est plus noir, il prolonge le splash de
-demarrage. Chaque ecran recoit le visuel de la galerie qui lui revient
-(portrait sur le playfield, paysage ailleurs, memes images que Plymouth :
-/opt/pincabos/media/splash), decode par GdkPixbuf et pose en fond de fenetre
-(pixmap X : le serveur repeint seul). Le playfield d une dalle paysage recoit
-le portrait tourne de 270 dans le MEME sens que le splash (PINCABOS_VOILE_SENS_V2 :
-l enumeration GdkPixbuf compte en anti-horaire, ffmpeg en horaire). Sans
-GdkPixbuf ou sans visuel, le voile reste noir : rien ne bloque.
+PINCABOS_VOILE_NOIR_V3 (Yann, 07/09/2026 : « mets le en noir pour tout le monde
+avec un fondu en transparence vers VPinFE ») : le voile est NOIR par defaut.
+Reafficher les visuels du splash apres le splash lui-meme ne prolongeait rien,
+cela rejouait une image deja vue : un clignotement, pas un raccord. Le noir ne
+se voit pas, et c est le but. --visuels rend l ancien comportement.
 
-  pincabos-voile-ecrans [--delai 3.5] [--max 40] [--fenetre "VPinFE Table"] [--noir]
+Le fondu : sans compositeur (aucun sur un pincab, et en lancer un couterait de
+la latence en jeu), l opacite d une fenetre X n existe pas. On passe donc par la
+rampe de gamma de l ecran (XF86VidMode), qui s applique a TOUT ce que la sortie
+affiche, voile retire compris : on descend a zero, on retire le voile, on remonte.
+Ce que le spectateur voit, c est VPinFE qui apparait en fondu. La rampe est
+restauree quoi qu il arrive (fin normale, exception, SIGTERM de systemd) : un
+ecran laisse a zero serait une panne noire.
+
+PINCABOS_VOILE_VISUELS_V1 (--visuels) : chaque ecran recoit le visuel de la
+galerie qui lui revient (portrait sur le playfield, paysage ailleurs, memes
+images que Plymouth : /opt/pincabos/media/splash), decode par GdkPixbuf et pose
+en fond de fenetre (pixmap X : le serveur repeint seul). Le playfield d une dalle
+paysage recoit le portrait tourne de 270 dans le MEME sens que le splash
+(PINCABOS_VOILE_SENS_V2 : l enumeration GdkPixbuf compte en anti-horaire, ffmpeg
+en horaire). Sans GdkPixbuf ou sans visuel, le voile reste noir : rien ne bloque.
+
+  pincabos-voile-ecrans [--delai 3.5] [--max 40] [--fenetre "VPinFE Table"]
+                        [--visuels] [--fondu 0.45]
 """
 from __future__ import annotations
 
@@ -33,6 +46,7 @@ import json
 import os
 import random
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -189,6 +203,64 @@ def x11():
     return lib
 
 
+def rampe(taille: int, facteur: float) -> list:
+    """Rampe de gamma lineaire mise a l echelle : 0 = noir, 1 = image normale.
+
+    Sortie en 16 bits, taille imposee par le serveur (2048 sur le cab de Yann).
+    """
+    if taille < 2:
+        return []
+    facteur = max(0.0, min(1.0, facteur))
+    haut = taille - 1
+    return [max(0, min(65535, int(65535 * (i / haut) * facteur))) for i in range(taille)]
+
+
+class Fondu:
+    """Fondu de l ecran par la rampe de gamma (PINCABOS_VOILE_NOIR_V3).
+
+    Facteur 0 = noir, 1 = image normale. Inoperant et silencieux si la
+    bibliotheque ou l extension manquent : le voile se retire sec, comme avant.
+    """
+
+    def __init__(self, dpy):
+        self.dpy, self.taille, self.vm, self.pose = dpy, 0, None, False
+        try:
+            vm = ctypes.CDLL("libXxf86vm.so.1")
+        except OSError as exc:
+            print(f"voile : pas de fondu ({exc})")
+            return
+        vm.XF86VidModeGetGammaRampSize.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
+        vm.XF86VidModeSetGammaRamp.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
+                                               ctypes.POINTER(ctypes.c_ushort), ctypes.POINTER(ctypes.c_ushort),
+                                               ctypes.POINTER(ctypes.c_ushort)]
+        taille = ctypes.c_int(0)
+        if not vm.XF86VidModeGetGammaRampSize(ctypes.c_void_p(dpy), 0, ctypes.byref(taille)) \
+                or taille.value <= 1:
+            print("voile : pas de fondu (rampe de gamma indisponible)")
+            return
+        self.vm, self.taille = vm, taille.value
+
+    def disponible(self) -> bool:
+        return self.vm is not None
+
+    def poser(self, facteur: float) -> None:
+        if self.vm is None:
+            return
+        n = self.taille
+        valeurs = rampe(n, facteur)
+        canaux = [(ctypes.c_ushort * n)(*valeurs) for _ in range(3)]
+        self.vm.XF86VidModeSetGammaRamp(ctypes.c_void_p(self.dpy), 0, n, *canaux)
+        self.pose = facteur < 1.0
+
+    def restaurer(self) -> None:
+        """Toujours appelee : un ecran laisse a zero serait une panne noire."""
+        if self.vm is not None and self.pose:
+            try:
+                self.poser(1.0)
+            except Exception:
+                pass
+
+
 def habiller(lib, dpy, ecran, win, role: str, w: int, h: int, hasard: random.Random, gardes: list) -> str:
     """Pose le visuel en fond de la fenetre ; renvoie le nom du visuel, ou '' (voile noir)."""
     if lib.XDefaultDepth(dpy, ecran) != 24:
@@ -224,7 +296,12 @@ def main(argv) -> int:
     p.add_argument("--delai", type=float, default=3.5, help="secondes entre la fenetre du frontend et le retrait")
     p.add_argument("--max", type=float, default=40.0, help="duree maximale du voile")
     p.add_argument("--fenetre", default="VPinFE Table")
-    p.add_argument("--noir", action="store_true", help="voile noir, sans visuel")
+    # PINCABOS_VOILE_NOIR_V3 : noir par defaut. --noir reste accepte (il ne fait
+    # plus rien) pour ne pas casser une unite ou un script qui le passe encore.
+    p.add_argument("--visuels", action="store_true", help="reafficher les visuels du splash")
+    p.add_argument("--noir", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--fondu", type=float, default=0.45,
+                   help="duree du fondu vers le frontend, en secondes (0 = retrait sec)")
     a = p.parse_args(argv[1:])
 
     try:
@@ -268,12 +345,17 @@ def main(argv) -> int:
     for (role, x, y, w, h) in geos:
         win = lib.XCreateSimpleWindow(dpy, racine, x, y, w, h, 0, noir, noir)
         lib.XChangeWindowAttributes(dpy, win, CW_OVERRIDE_REDIRECT, ctypes.byref(attrs))
-        if not a.noir:
+        if a.visuels:
             visuels.append(habiller(lib, dpy, ecran, win, role, w, h, hasard, gardes) or "noir")
         lib.XMapRaised(dpy, win)
         fenetres.append(win)
     lib.XFlush(dpy)
     print(f"voile : {len(fenetres)} ecran(s) couvert(s) {[(g[1], g[2], g[3], g[4]) for g in geos]} visuels {visuels}")
+
+    fondu = Fondu(dpy)
+    # Le voile couvre : quoi qu il arrive ensuite, la rampe revient a 1.
+    for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        signal.signal(sig, lambda *_: (fondu.restaurer(), sys.exit(0)))
 
     debut = time.monotonic()
     vue = None
@@ -292,12 +374,26 @@ def main(argv) -> int:
         if (vue is not None and maintenant - vue >= a.delai) or maintenant - debut >= a.max:
             break
         time.sleep(0.02)
-    for win in fenetres:
-        lib.XUnmapWindow(dpy, win)
-        lib.XDestroyWindow(dpy, win)
+    # Ecran a zero pendant que le voile couvre encore : rien ne bouge a l ecran.
+    # On retire le voile derriere ce noir, puis on remonte : le frontend apparait.
+    etapes = max(1, int(a.fondu / 0.015)) if a.fondu > 0 and fondu.disponible() else 0
+    try:
+        if etapes:
+            fondu.poser(0.0)
+            lib.XFlush(dpy)
+        for win in fenetres:
+            lib.XUnmapWindow(dpy, win)
+            lib.XDestroyWindow(dpy, win)
+        lib.XFlush(dpy)
+        for i in range(1, etapes + 1):
+            fondu.poser(i / etapes)
+            time.sleep(a.fondu / etapes)
+    finally:
+        fondu.restaurer()
     lib.XFlush(dpy)
     lib.XCloseDisplay(dpy)
-    print(f"voile : retire a {time.monotonic() - debut:.1f} s")
+    print(f"voile : retire a {time.monotonic() - debut:.1f} s"
+          + (f", fondu {a.fondu:.2f} s en {etapes} pas" if etapes else ", sans fondu"))
     return 0
 
 
