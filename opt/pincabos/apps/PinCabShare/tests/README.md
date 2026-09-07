@@ -1,6 +1,6 @@
 # Tests PinCabShare V2
 
-Exécution ciblée :
+Tests ciblés :
 
 ```bash
 python3 -m unittest discover -s /opt/pincabos/apps/PinCabShare/tests -p 'test_*.py' -v
@@ -8,16 +8,16 @@ python3 -m unittest discover -s /opt/pincabos/apps/PinCabShare/tests -p 'test_*.
 
 Couverture principale :
 
-- gate `open` valide avec 2 CAB ;
-- gate serveur `closed` => fermeture immédiate ;
-- TTL court obligatoire ;
-- gate expiré/trop lointain => fermé ;
+- gate serveur valide ;
+- serveur inaccessible => inter-CAB fermé ;
+- gate désactivé/expiré/trop lointain => fermé ;
+- mauvais session/room/nonce => fermé ;
 - CAB local absent ou membre dupliqué => fermé ;
-- `share_nonce` invalide => fermé ;
-- compatibilité avec l'alias live sans `expires_at` ;
-- HTTPS obligatoire ;
-- identité `PinCabOS-Device` utilisée sans exposer le token ;
-- fallback `/api/device/pincabshare/state` -> `/api/device/multiplayer/share-gate` sur 404 ;
-- les liens gérés sont supprimés au close, mais un dossier réel ou un symlink non géré n'est jamais détruit.
+- client HTTPS obligatoire ;
+- authentification `PinCabOS-Device` utilisée sans exposer le token ;
+- vue locale `/home/pinball/PinCabShare` gérée uniquement par les labels autoritaires ;
+- aucun partage SMB PinCabShare permanent ;
+- export NFS dynamique limité aux IP exactes des pairs autorisés ;
+- arrêt/fermeture du gate => mDNS, export, montages et liens gérés retirés, données locales conservées.
 
-Les tests unitaires ne montent pas de NFS réel et ne touchent ni VPX, ni BGFX, ni VPinFE.
+Le mode jeu Multiplayer reste hors périmètre de ces tests et ne doit pas être repris avant validation réelle CAB1↔CAB10.
