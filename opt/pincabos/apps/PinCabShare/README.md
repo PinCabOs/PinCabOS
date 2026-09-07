@@ -46,12 +46,14 @@ Le gate doit confirmer simultanément :
 
 - session Multiplayer active ;
 - correspondance exacte user ↔ CAB ;
+- membership réel du user dans la room Lobby exacte liée à la session ;
 - room Lobby active ;
-- présence navigateur Lobby fraîche ;
 - présence CAB PinCabShare fraîche ;
 - 2 à 4 CAB présents ;
 - CAB local inclus dans le groupe ;
 - bail court valide (maximum accepté côté client : 12 s).
+
+La fraîcheur d'un onglet navigateur n'est pas utilisée comme autorité. Le CAB authentifié entretient lui-même son bail device en pollant le gate. Quitter la room retire le membership; perdre le CAB ou le daemon fait expirer le bail rapidement.
 
 ## Transport
 
