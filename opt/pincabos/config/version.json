@@ -1,6 +1,6 @@
 {
   "name": "PinCabOS",
-  "version": "Alpha 4.50",
+  "version": "Alpha 4.52",
   "build": "DEV",
   "channel": "pincabos.cc",
   "codename": "Thor",
@@ -9,5 +9,5 @@
   "update_base_url": "github.com/PinCabOS/PinCabOS/releases",
   "latest_json_url": "",
   "managed_by": "PinCabOS",
-  "updated_at": "2026-09-06 23:20:14"
+  "updated_at": "2026-09-07 14:57:48"
 }
