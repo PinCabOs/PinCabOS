@@ -185,6 +185,9 @@ def sha256(path):
 # les cabinets encore en 3.43 ou moins.
 PENDING_PREFIXES = (
     'opt/pincabos/launchers/',
+    # PINCABOS_OVERLAYS_LIVRES_V1 : ajoute en attente ici ; a retirer a la
+    # release suivante pour que les overlays partent vraiment.
+    'opt/pincabos/overlays/',
     # PINCABOS_SPLASH_FROM_SCREENS_V3 : 'opt/pincabos/media/splash/' a attendu ici
     # en 3.69 ; le parc connait le prefixe depuis, les visuels partent maintenant.
 )
@@ -210,6 +213,13 @@ def allowed(rel):
       'opt/pincabos/web/','opt/pincabos/bin/','opt/pincabos/script/','opt/pincabos/scripts/',
       'opt/pincabos/update/','opt/pincabos/modules/','opt/pincabos/tools/','opt/pincabos/media/audio-voix/',
       'opt/pincabos/installer-gui/','opt/pincabos/apps/VPX_MultiPlayers/',
+      # PINCABOS_OVERLAYS_LIVRES_V1 : les bibliotheques posees a cote des runtimes
+      # (libdof pour VPX et VPinFE, surcouches DudesCab). Elles etaient hors
+      # perimetre : un cab gardait la libdof de son ISO pour toujours, et l ecart
+      # entre VPX et VPinFE a vecu trois mois sans pouvoir etre rattrape
+      # (cab de Yann, 08/09/2026). En attente ci-dessous : les fichiers partent
+      # a la release suivante, quand tout le parc connait le prefixe.
+      'opt/pincabos/overlays/',
       # PINCABOS_SPLASH_FROM_SCREENS_V3 : visuels de demarrage (galeries portrait,
       # paysage, fonds GRUB). Prefixe en attente d abord (PENDING_PREFIXES), les
       # fichiers partent a la release suivante : la CI le verifie.
