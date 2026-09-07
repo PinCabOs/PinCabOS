@@ -31,12 +31,15 @@ class Composants(unittest.TestCase):
             self.assertRegex(c["sha256"], r"^[0-9a-f]{64}$")
             self.assertEqual(c["archive"], c["url"].rsplit("/", 1)[1])
             self.assertTrue(c["install"].startswith("opt/pinball/"), "PINCABOS_RUNTIMES_OPT_V1")
+            # PINCABOS_RUNTIME_ROTATION_V1 : le dossier porte son nom, la version est une donnee
+            self.assertIn(Path(c["install"]).name, ("vpx", "vpinfe"), "pas de version dans le nom")
+            self.assertTrue(c.get("version"), f"{nom} : version absente de components.json")
         vpx = d["components"]["vpx"]
-        self.assertIn("5436", vpx["url"]); self.assertIn("5436", vpx["install"])
+        self.assertIn("5436", vpx["url"]); self.assertIn("5436", vpx["version"])
         # variante slim : l archive complete embarque un Chromium de 633 Mo inutile (ISO +160 Mo, rootfs +660 Mo)
         self.assertTrue(d["components"]["vpinfe"]["archive"].endswith("-linux-x64-slim.zip"))
-        self.assertEqual(vpx["links"]["opt/pinball/vpx"], Path(vpx["install"]).name, "/opt/pinball/vpx pointe sur le bundle epingle")
-        self.assertEqual(vpx["links"]["home/pinball/vpx"], "/opt/pinball/vpx", "lien de compatibilite du compte")
+        self.assertEqual(vpx["links"], {"home/pinball/vpx": "/opt/pinball/vpx"},
+                         "seul le compte du joueur garde un lien")
         self.assertEqual(d["components"]["vpinfe"]["links"]["home/pinball/vpinfe"], "/opt/pinball/vpinfe")
         self.assertEqual(d.get("runtimes_dir"), "opt/pinball")
 
@@ -45,9 +48,8 @@ class Composants(unittest.TestCase):
         src = R / c["source"]
         self.assertTrue(src.is_file(), src)
         self.assertEqual(hashlib.md5(src.read_bytes()).hexdigest(), c["md5"], "le libdof canonique a change : mettre components.json a jour")
-        vpx = fc.charger()["components"]["vpx"]["install"]
         for cible in c["copies"]:
-            self.assertTrue(cible.startswith(vpx + "/plugins/dof/"), cible)
+            self.assertTrue(cible.startswith("opt/pinball/vpx/plugins/dof/"), cible)
         for lien in c["links"]:
             self.assertTrue(lien.startswith("opt/pinball/vpinfe/_internal/libdof"), lien)
 
@@ -87,12 +89,13 @@ class Pose(unittest.TestCase):
         self.archives = {"https://x/vpx.tar.gz": vpx_tar, "https://x/fe.zip": fe_zip}
         self.comp = {"schema": "pincabos.image-components/v1", "components": {
             "vpx": {"kind": "bundle", "name": "vpx", "url": "https://x/vpx.tar.gz", "archive": "vpx.tar.gz", "sha256": fc.sha256_de(vpx_tar),
-                    "install": "opt/pinball/VPinballX_BGFX-1-linux-x64", "check": "VPinballX_BGFX", "links": {"opt/pinball/vpx": "VPinballX_BGFX-1-linux-x64", "home/pinball/vpx": "/opt/pinball/vpx"}},
+                    "install": "opt/pinball/vpx", "version": "1.0-essai", "check": "VPinballX_BGFX",
+                    "links": {"home/pinball/vpx": "/opt/pinball/vpx"}},
             "vpinfe": {"kind": "bundle", "name": "fe", "url": "https://x/fe.zip", "archive": "fe.zip", "sha256": fc.sha256_de(fe_zip),
                        "install": "opt/pinball/vpinfe", "check": "vpinfe", "links": {"home/pinball/vpinfe": "/opt/pinball/vpinfe"}},
             "libdof": {"kind": "repo-file", "name": "libdof", "source": "opt/pincabos/overlays/libdof-canonical/libdof.so.0.4.7",
                        "md5": hashlib.md5(b"patche").hexdigest(),
-                       "copies": ["opt/pinball/VPinballX_BGFX-1-linux-x64/plugins/dof/libdof.so.0.4.7", "opt/pinball/VPinballX_BGFX-1-linux-x64/plugins/dof/libdof.so"],
+                       "copies": ["opt/pinball/vpx/plugins/dof/libdof.so.0.4.7", "opt/pinball/vpx/plugins/dof/libdof.so"],
                        "links": {"opt/pinball/vpinfe/_internal/libdof.so.0.4.7": "/opt/pincabos/overlays/vpinfe-dof-ledwiz-hidraw-stable/libdof.so.0.4.7"}}}}
         self.appels = []
 
@@ -106,15 +109,18 @@ class Pose(unittest.TestCase):
         j = fc.appliquer(self.rootfs, self.cache, composants=self.comp, depot=self.depot, fetch=self.fetch)
         self.assertFalse(any(l.startswith("NOGO") for l in j), j)
         h = self.rootfs / "opt/pinball"
-        self.assertTrue((h / "VPinballX_BGFX-1-linux-x64/VPinballX_BGFX").is_file(), "archive VPX aplatie (racine ./)")
+        self.assertTrue((h / "vpx/VPinballX_BGFX").is_file(), "archive VPX aplatie (racine ./)")
         self.assertEqual(os.readlink(self.rootfs / "home/pinball/vpx"), "/opt/pinball/vpx", "compatibilite du compte")
         self.assertEqual(os.readlink(self.rootfs / "home/pinball/vpinfe"), "/opt/pinball/vpinfe")
-        self.assertTrue(os.access(h / "VPinballX_BGFX-1-linux-x64/VPinballX_BGFX", os.X_OK))
-        self.assertEqual(os.readlink(h / "vpx"), "VPinballX_BGFX-1-linux-x64")
+        self.assertTrue(os.access(h / "vpx/VPinballX_BGFX", os.X_OK))
+        self.assertFalse((h / "vpx").is_symlink(), "un dossier, pas un lien")
+        version = json.loads((h / "vpx/.pincabos-version").read_text(encoding="utf-8"))
+        self.assertEqual(version["version"], "1.0-essai")
+        self.assertEqual(version["composant"], "vpx")
         self.assertTrue((h / "vpinfe/vpinfe").is_file(), "dossier racine unique du zip aplati")
         self.assertTrue(os.access(h / "vpinfe/vpinfe", os.X_OK), "bit executable restaure depuis le zip")
-        self.assertEqual((h / "VPinballX_BGFX-1-linux-x64/plugins/dof/libdof.so.0.4.7").read_bytes(), b"patche", "libdof vendored remplace")
-        self.assertEqual((h / "VPinballX_BGFX-1-linux-x64/plugins/dof/libdof.so").read_bytes(), b"patche")
+        self.assertEqual((h / "vpx/plugins/dof/libdof.so.0.4.7").read_bytes(), b"patche", "libdof vendored remplace")
+        self.assertEqual((h / "vpx/plugins/dof/libdof.so").read_bytes(), b"patche")
         self.assertEqual(os.readlink(h / "vpinfe/_internal/libdof.so.0.4.7"), "/opt/pincabos/overlays/vpinfe-dof-ledwiz-hidraw-stable/libdof.so.0.4.7")
         self.assertEqual(len(self.appels), 2)
         # seconde passe : cache verifie, rien retelecharge

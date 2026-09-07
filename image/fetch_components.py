@@ -5,7 +5,9 @@ Le rootfs de l'ISO ne porte plus les bundles VPX et VPinFE copiés d'un cab :
 ils sont téléchargés depuis les releases officielles, version épinglée et
 somme SHA-256 vérifiée (image/components.json), puis posés sous /opt/pinball
 dans le rootfs (PINCABOS_RUNTIMES_OPT_V1 ; le compte du joueur garde les liens
-de compatibilité ~/vpx et ~/vpinfe). libdof patché (backboard, Dude's Cab) vient du dépôt
+de compatibilité ~/vpx et ~/vpinfe). Les dossiers portent leur nom et la version
+est écrite dans .pincabos-version (PINCABOS_RUNTIME_ROTATION_V1). libdof patché
+(backboard, Dude's Cab) vient du dépôt
 (overlays/libdof-canonical) et remplace la copie vendored des deux bundles,
 comme sur les cabs. Les modèles du compte (vpinfe.ini, DOF, tableau de bord)
 suivent via pincabos_home_templates.py.
@@ -24,6 +26,7 @@ import tarfile
 import tempfile
 import urllib.request
 import zipfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 ICI = Path(__file__).resolve().parent
@@ -101,6 +104,21 @@ def extraire(archive: Path, dest: Path) -> Path:
     return dest
 
 
+def _ecrire_version(dest: Path, version: str, comp: dict) -> None:
+    """Dépose .pincabos-version : c'est là que se lit la version, plus dans le nom."""
+    valeur = {
+        "schema": "pincabos.runtime-version/1",
+        "composant": Path(comp["install"]).name,
+        "version": version,
+        "source": comp.get("url", ""),
+        "sha256": comp.get("sha256", ""),
+        "pose_par": "image/fetch_components.py",
+        "pose_le": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+    }
+    (dest / ".pincabos-version").write_text(
+        json.dumps(valeur, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
 def proprietaire(chemin: Path, uid: int = UID, gid: int = GID):
     if os.geteuid() != 0:
         return
@@ -125,8 +143,13 @@ def poser_bundle(rootfs: Path, comp: dict, cache: Path, dry_run=False, fetch=Non
         journal.append(f"GO: (à blanc) extraction vers {dest}")
     else:
         extraire(archive, dest)
+        # PINCABOS_RUNTIME_ROTATION_V1 : la version ne vit plus dans le nom du dossier
+        version = str(comp.get("version") or "")
+        if version:
+            _ecrire_version(dest, version, comp)
         proprietaire(dest)
-        journal.append(f"GO: {comp['name']} posé dans {comp['install']}")
+        journal.append(f"GO: {comp['name']} posé dans {comp['install']}"
+                       + (f" (version {version})" if version else ""))
         if comp.get("check") and not (dest / comp["check"]).exists():
             journal.append(f"NOGO: {comp['check']} absent après extraction de {comp['name']}")
     for lien, cible in (comp.get("links") or {}).items():

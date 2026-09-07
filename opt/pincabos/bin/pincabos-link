@@ -711,6 +711,21 @@ def collect_services():
     return result
 
 
+def _version_posee(dossier) -> str:
+    """PINCABOS_RUNTIME_ROTATION_V1 : la version vit dans .pincabos-version, plus
+    dans le nom du dossier. Chaine vide si le fichier manque (cabinet pas encore
+    passe a la rotation) : l appelant garde alors ses anciens reperes."""
+    import json
+    try:
+        valeur = json.loads(
+            (Path(dossier) / ".pincabos-version").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(valeur, dict):
+        return ""
+    return str(valeur.get("version") or "")
+
+
 def collect_software_versions():
     vpx_version = None
     vpinfe_version = None
@@ -750,6 +765,15 @@ def collect_software_versions():
             if value:
                 vpinfe_version = value[:64]
                 break
+
+    # PINCABOS_RUNTIME_ROTATION_V1 : quand .pincabos-version existe, il fait foi.
+    # C est aussi la seule source pour VPinFE, qui ne livre ni VERSION ni version.txt.
+    posee = _version_posee(Path(_pco_chemin("vpx_link", "/opt/pinball/vpx")))
+    if posee:
+        vpx_version = posee
+    posee = _version_posee(vpinfe_dir)
+    if posee:
+        vpinfe_version = posee
 
     return {
         "vpx_version": vpx_version,

@@ -154,6 +154,21 @@ def _configured_candidates() -> list[Path]:
     return unique
 
 
+def _version_posee(dossier) -> str:
+    """PINCABOS_RUNTIME_ROTATION_V1 : la version vit dans .pincabos-version, plus
+    dans le nom du dossier. Chaine vide si le fichier manque (cabinet pas encore
+    passe a la rotation) : l appelant garde alors ses anciens reperes."""
+    import json
+    try:
+        valeur = json.loads(
+            (Path(dossier) / ".pincabos-version").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(valeur, dict):
+        return ""
+    return str(valeur.get("version") or "")
+
+
 def _local_vpx() -> dict[str, Any]:
     # PINCABOS_VPX_CANONICAL_LINK_V2
     #
@@ -199,6 +214,11 @@ def _local_vpx() -> dict[str, Any]:
         )[-1]
 
     version, revision, commit = _version_parts(str(preferred))
+
+    # PINCABOS_RUNTIME_ROTATION_V1 : le dossier ne porte plus la version, elle est
+    # ecrite a la pose. On la lit avant de payer un lancement du binaire.
+    if not version:
+        version, revision, commit = _version_parts(_version_posee(preferred.parent))
 
     if not version:
         try:

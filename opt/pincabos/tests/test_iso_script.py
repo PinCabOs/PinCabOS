@@ -171,12 +171,14 @@ class LienVpx(unittest.TestCase):
         self.assertIn("ensure_target_vpx_link() {", s)
         self.assertLess(s.index("  ensure_target_vpx_link\n"), s.index("  apply_target_identity\n"))
         self.assertIn('local h="$TARGET/opt/pinball"', s)
-        self.assertIn('ln -sfn "$(basename "$plus_recent")" "$h/vpx"', s)
+        self.assertIn('if [ -x "$h/vpx/VPinballX_BGFX" ]', s)
         self.assertIn('bash "$migrateur" --racine "$TARGET" --uid 1000 --gid 1000', s)
         self.assertIn('test -x "$TARGET/opt/pinball/vpinfe/vpinfe"', s)
         p = Path(RACINE, "opt/pincabos/tools/pincabos-paths.sh").read_text(encoding="utf-8")
-        self.assertIn("PINCABOS_VPX_LINK_V1", p)
-        self.assertIn('ln -sfn "$(basename "$_pco_vpx_dir")" "$PCO_VPX_LINK"', p)
+        # PINCABOS_RUNTIME_ROTATION_V1 : le secours nomme le bundle, il ne cree plus de lien
+        self.assertIn("PINCABOS_RUNTIME_ROTATION_V1", p)
+        self.assertIn('mv "${_pco_vpx_dir%/}" "$PCO_VPX_LINK"', p)
+        self.assertNotIn("ln -sfn", p)
 
 
 

@@ -1219,13 +1219,14 @@ PY
 }
 
 ensure_target_vpx_link() {
-    # PINCABOS_VPX_LINK_V1 : toute la chaine de lancement passe par le lien vpx
-    # (pincabos-paths.sh). Une image sans ce lien (vu le 05/09 : bundle 5231 nu)
-    # installe un cab qui ne lance aucune table. On pointe le bundle le plus recent.
+    # PINCABOS_VPX_LINK_V1 : toute la chaine de lancement passe par /opt/pinball/vpx
+    # (pincabos-paths.sh). Une image ou ce dossier manque installe un cab qui ne
+    # lance aucune table : la migration le construit, on verifie qu il est la.
+    # PINCABOS_RUNTIME_ROTATION_V1 : c est un dossier nomme, plus un lien.
     # PINCABOS_RUNTIMES_OPT_V1 : les runtimes vivent sous /opt/pinball ; un payload
     # pris sur un cabinet pas encore migre les a dans le compte du joueur, le
     # script de migration livre les y amene et pose les liens de compatibilite.
-    local h="$TARGET/opt/pinball" plus_recent migrateur="$TARGET/usr/local/sbin/pincabos-runtimes-opt"
+    local h="$TARGET/opt/pinball" migrateur="$TARGET/usr/local/sbin/pincabos-runtimes-opt"
     if [ -x "$migrateur" ]; then
         if bash "$migrateur" --racine "$TARGET" --uid 1000 --gid 1000; then
             pco_go "runtimes VPX et VPinFE sous /opt/pinball"
@@ -1234,15 +1235,10 @@ ensure_target_vpx_link() {
         fi
     fi
     [ -d "$h" ] || { pco_warn "no /opt/pinball in the image"; return 0; }
-    if [ ! -e "$h/vpx" ] || [ ! -x "$h/vpx/VPinballX_BGFX" ]; then
-        plus_recent="$(ls -d "$h"/VPinballX_BGFX-*/ 2>/dev/null | sort -V | tail -1)"
-        if [ -n "$plus_recent" ]; then
-            ln -sfn "$(basename "$plus_recent")" "$h/vpx"
-            chown -h 1000:1000 "$h/vpx" 2>/dev/null || true
-            pco_go "VPX link created: /opt/pinball/vpx -> $(basename "$plus_recent")"
-        else
-            pco_warn "no VPinballX_BGFX bundle in the image: /opt/pinball/vpx not created"
-        fi
+    if [ -x "$h/vpx/VPinballX_BGFX" ]; then
+        pco_go "VPX en place : /opt/pinball/vpx"
+    else
+        pco_warn "no VPinballX_BGFX in /opt/pinball/vpx"
     fi
 }
 
