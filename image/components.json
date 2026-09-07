@@ -31,7 +31,7 @@
     },
     "libdof": {
       "kind": "repo-file",
-      "name": "libdof 0.4.7 patche PinCabOS (backboard, Dude's Cab) — overlays/libdof-canonical",
+      "name": "libdof 0.4.7 patche PinCabOS (backboard, Dude's Cab) — overlays/libdof-canonical, la MEME pour VPX et VPinFE (PINCABOS_LIBDOF_UNIQUE_V1)",
       "source": "opt/pincabos/overlays/libdof-canonical/libdof.so.0.4.7",
       "md5": "a9b6253a784a93b059b4f42431fd9f4a",
       "copies": [
@@ -39,9 +39,9 @@
         "opt/pinball/vpx/plugins/dof/libdof.so"
       ],
       "links": {
-        "opt/pinball/vpinfe/_internal/libdof.so": "/opt/pincabos/overlays/vpinfe-dof-ledwiz-hidraw-stable/libdof.so.0.4.7",
-        "opt/pinball/vpinfe/_internal/libdof.so.0": "/opt/pincabos/overlays/vpinfe-dof-ledwiz-hidraw-stable/libdof.so.0.4.7",
-        "opt/pinball/vpinfe/_internal/libdof.so.0.4.7": "/opt/pincabos/overlays/vpinfe-dof-ledwiz-hidraw-stable/libdof.so.0.4.7"
+        "opt/pinball/vpinfe/_internal/libdof.so": "/opt/pincabos/overlays/libdof-canonical/libdof.so.0.4.7",
+        "opt/pinball/vpinfe/_internal/libdof.so.0": "/opt/pincabos/overlays/libdof-canonical/libdof.so.0.4.7",
+        "opt/pinball/vpinfe/_internal/libdof.so.0.4.7": "/opt/pincabos/overlays/libdof-canonical/libdof.so.0.4.7"
       }
     }
   }
