@@ -1,0 +1,35 @@
+{
+  "schema": "pincabos.pincabshare/v2",
+  "component_id": "PinCabShare",
+  "version": "2.0.0-lab",
+  "install_root": "/opt/pincabos/apps/PinCabShare",
+  "service": "pincabshare-v2.service",
+  "authority": "https://pincabos.cc",
+  "identity_source": "/var/lib/pincabos-link/device.json",
+  "user_view": "/home/pinball/PinCabShare",
+  "data_path": "/srv/pincabshare/data",
+  "runtime_path": "/run/pincabshare-v2",
+  "transport": {
+    "authorization": "HTTPS device gate",
+    "discovery": "Avahi/mDNS IPv4 only",
+    "files": "NFSv4",
+    "permanent_lan_share": false,
+    "broad_subnet_export": false
+  },
+  "dependencies": [
+    "avahi-daemon",
+    "avahi-utils",
+    "nfs-common",
+    "nfs-kernel-server"
+  ],
+  "safety": {
+    "fail_closed": true,
+    "minimum_cabinets": 2,
+    "maximum_cabinets": 4,
+    "private_vpx_modified": false,
+    "bgfx_modified": false,
+    "vpinfe_used": false,
+    "multiplayer_runtime_modified": false,
+    "data_deleted_on_close": false
+  }
+}
