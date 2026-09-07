@@ -109,7 +109,7 @@ class Integration(unittest.TestCase):
     def test_iso_sh(self):
         s = texte_installateur()
         self.assertIn("apply_target_network() {", s)
-        self.assertIn("  apply_target_screens\n  apply_target_network\n  apply_target_dmd\n  apply_target_audio\n  apply_target_dof\n  apply_target_toys\n  refresh_target_initrd_for_orientation\n", s)
+        self.assertIn("  apply_target_screens\n  apply_target_network\n  apply_target_dmd\n  apply_target_audio\n  apply_target_dof\n  apply_target_toys\n  purge_live_only_from_target\n  refresh_target_initrd_for_orientation\n", s)
         self.assertIn('netplan-takeover "$iface" --root "$TARGET"', s)
         self.assertIn("network-installer.done", s)
         # PINCABOS_INSTALLEUR_RESEAU_V2 : a la mise a jour, le choix reseau est rejoue apres la restauration

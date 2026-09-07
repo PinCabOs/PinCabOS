@@ -1,6 +1,7 @@
 [Unit]
 Description=PinCabOS Explorer Table Test
-After=graphical.target network.target
+# PINCABOS_UNITES_SANS_CYCLE_V1 : voir pincabos-chat-backglass-agent.service
+After=network.target
 Conflicts=pincabos-vpinfe.service
 
 [Service]
@@ -12,4 +13,4 @@ TimeoutStopSec=12
 Restart=no
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target
