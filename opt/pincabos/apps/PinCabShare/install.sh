@@ -11,6 +11,7 @@ EXPORT=/etc/exports.d/pincabshare-v2.exports
 AVAHI=/etc/avahi/services/pincabshare-v2.service
 DEVICE_STATE=/var/lib/pincabos-link/device.json
 COMMANDER=/opt/pincabos/web/pincabos_webapp_commander.py
+WEBAPP_PATCH="$ROOT/webapp_patch.py"
 
 fail() {
     printf 'NOGO [PINCABSHARE] %s\n' "$*" >&2
@@ -21,6 +22,7 @@ fail() {
 id pinball >/dev/null 2>&1 || fail "Utilisateur pinball absent."
 [[ -f "$ROOT/pincabshare.py" ]] || fail "Moteur PinCabShare absent."
 [[ -f "$ROOT/gate_client.py" ]] || fail "Client gate absent."
+[[ -f "$WEBAPP_PATCH" ]] || fail "Patch PinCab Links absent."
 [[ -f "$UNIT_SOURCE" ]] || fail "Unité systemd V2 absente."
 [[ -f "$DEVICE_STATE" ]] || fail "Identité PinCabOS Link absente."
 
@@ -45,8 +47,10 @@ done
 
 printf 'GO [BACKUP] %s\n' "$BACKUP"
 
-# Neutralise uniquement les anciens composants PinCabShare. Les données ne sont
-# jamais supprimées.
+# Neutralise uniquement les anciens composants inter-CAB V1. Les données ne
+# sont jamais supprimées. Le partage SMB historique /home/pinball/Share reste
+# volontairement intact et continue d'être exposé dans PinCab Explorer sous
+# « PinCabShare ».
 systemctl disable --now pincabshare-mesh.service >/dev/null 2>&1 || true
 systemctl disable --now pincabshare.service >/dev/null 2>&1 || true
 rm -f \
@@ -77,32 +81,23 @@ install -d -o root -g root -m 0755 /etc/exports.d /etc/avahi/services
 chmod 0755 \
     "$ROOT/pincabshare.py" \
     "$ROOT/gate_client.py" \
+    "$WEBAPP_PATCH" \
     "$ROOT/install.sh" \
     "$ROOT/uninstall.sh" \
     2>/dev/null || true
-python3 -m py_compile "$ROOT/pincabshare.py" "$ROOT/gate_client.py"
 
-# Commander doit afficher la vue dynamique V2. L'ancien « Partage PinCabOS »
-# reste volontairement sur /home/pinball/Share pour les autres outils.
+python3 -m py_compile \
+    "$ROOT/pincabshare.py" \
+    "$ROOT/gate_client.py" \
+    "$WEBAPP_PATCH"
+
+# PinCab Explorer:
+# - « PinCabShare » reste le SMB historique /home/pinball/Share;
+# - « PinCab Links » affiche directement les CAB dynamiques du Lobby depuis
+#   /home/pinball/PinCabShare.
 WEBAPP_PATCHED=0
 if [[ -f "$COMMANDER" ]]; then
-    python3 - "$COMMANDER" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
-old = '"PinCabShare": Path("/home/pinball/Share")'
-new = '"PinCabShare": Path("/home/pinball/PinCabShare")'
-
-if new in text:
-    print("GO [WEBAPP] PinCabShare déjà mappé vers la vue V2.")
-elif text.count(old) == 1:
-    path.write_text(text.replace(old, new, 1), encoding="utf-8")
-    print("GO [WEBAPP] PinCabShare -> /home/pinball/PinCabShare")
-else:
-    raise SystemExit("NOGO [WEBAPP] ancre PinCabShare inattendue")
-PY
+    python3 "$WEBAPP_PATCH" "$COMMANDER" || fail "Patch PinCab Links impossible."
     python3 -m py_compile "$COMMANDER" || fail "Commander invalide après patch."
     WEBAPP_PATCHED=1
 fi
@@ -135,7 +130,9 @@ printf 'GO [SERVICE] pincabshare-v2.service actif.\n'
 printf 'GO [DATA] %s conservé.\n' "$DATA"
 printf 'GO [VIEW] %s géré automatiquement.\n' "$VIEW"
 printf 'GO [TRANSPORT] NFS dynamique + Avahi découverte uniquement.\n'
-printf 'GO [FAIL-CLOSED] aucun export permanent /24 et aucun SMB PinCabShare ajouté.\n'
+printf 'GO [SMB] PinCabShare historique /home/pinball/Share conservé.\n'
+printf 'GO [WEBAPP] PinCab Links expose les CAB dynamiques dans le menu.\n'
+printf 'GO [FAIL-CLOSED] aucun export NFS permanent /24.\n'
 printf 'GO [SAFETY] Multiplayer non modifié; VPX privé, BGFX privé et VPinFE non touchés.\n'
 
 if [[ -f "$RUNTIME/status.json" ]]; then
