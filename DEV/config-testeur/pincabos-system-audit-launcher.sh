@@ -31,13 +31,23 @@ say " CLOUDFLARE GATEWAY -> GITHUB"
 say " AUCUN TOKEN SUR LE CABINET"
 say "================================================================"
 say
-while :; do
-  IFS= read -r -p "Nom du testeur : " TESTER_NAME
-  TESTER_NAME="${TESTER_NAME#${TESTER_NAME%%[![:space:]]*}}"
-  TESTER_NAME="${TESTER_NAME%${TESTER_NAME##*[![:space:]]}}"
-  [[ -n "$TESTER_NAME" ]] && break
-  say "Le nom du testeur est obligatoire."
-done
+
+# Le nom vient automatiquement de la session PinCabOS qui a jumele le cabinet.
+# PINCABOS_SESSION_NAME = display_name du compte, sinon username.
+# Aucun prompt interactif: un lancement automatique sans identite de session
+# doit echouer proprement plutot que rester bloque en attente de saisie.
+TESTER_NAME="${PINCABOS_SESSION_NAME:-${PINCABOS_TESTER_NAME:-}}"
+TESTER_NAME="${TESTER_NAME#${TESTER_NAME%%[![:space:]]*}}"
+TESTER_NAME="${TESTER_NAME%${TESTER_NAME##*[![:space:]]}}"
+
+if [[ -z "$TESTER_NAME" ]]; then
+  say "NOGO [SESSION] Nom de session PinCabOS absent."
+  say "Le jumelage doit fournir PINCABOS_SESSION_NAME."
+  exit 1
+fi
+
+say "GO [SESSION] Testeur : $TESTER_NAME"
+say
 
 mkdir -p "$WORK_DIR"
 chmod 700 "$WORK_DIR"
