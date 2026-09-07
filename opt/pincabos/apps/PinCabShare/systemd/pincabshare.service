@@ -1,26 +1,23 @@
 [Unit]
-Description=PinCabOS PinCabShare V2 — SMB LAN permanent + Lobby-gated CAB mesh
-After=network-online.target avahi-daemon.service smbd.service pincabos-multiplayer-agent.service
-Wants=network-online.target avahi-daemon.service smbd.service
-Requires=pincabos-multiplayer-agent.service
+Description=PinCabOS PinCabShare V2 — Lobby-gated NFS CAB mesh
+After=network-online.target avahi-daemon.service nfs-server.service
+Wants=network-online.target avahi-daemon.service nfs-server.service
 
 [Service]
 Type=simple
 User=root
 Group=root
+WorkingDirectory=/opt/pincabos/apps/PinCabShare
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /opt/pincabos/apps/PinCabShare/pincabshare.py
-ExecStopPost=/usr/bin/python3 /opt/pincabos/apps/PinCabShare/close_intercab.py
+ExecStopPost=/usr/bin/python3 /opt/pincabos/apps/PinCabShare/pincabshare.py --close
 Restart=always
-RestartSec=2
+RestartSec=3
 KillSignal=SIGTERM
-TimeoutStopSec=15
-NoNewPrivileges=true
+TimeoutStopSec=20
 
-# IMPORTANT: ne pas activer ProtectSystem/PrivateTmp/PrivateMounts ici.
-# Le daemon monte les partages CIFS dans /run/pincabshare/mounts et ces mounts
-# doivent rester visibles dans le namespace du cabinet pour les liens de
-# /home/pinball/PinCabShare.
+# Le daemon doit gérer les exports NFS et les montages du namespace hôte.
+# Aucun ProtectSystem/PrivateMounts ici volontairement.
 
 [Install]
 WantedBy=multi-user.target
