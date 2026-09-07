@@ -19,7 +19,8 @@ demarrage. Chaque ecran recoit le visuel de la galerie qui lui revient
 (portrait sur le playfield, paysage ailleurs, memes images que Plymouth :
 /opt/pincabos/media/splash), decode par GdkPixbuf et pose en fond de fenetre
 (pixmap X : le serveur repeint seul). Le playfield d une dalle paysage recoit
-le portrait tourne de 270, haut de table a gauche, comme le splash. Sans
+le portrait tourne de 270 dans le MEME sens que le splash (PINCABOS_VOILE_SENS_V2 :
+l enumeration GdkPixbuf compte en anti-horaire, ffmpeg en horaire). Sans
 GdkPixbuf ou sans visuel, le voile reste noir : rien ne bloque.
 
   pincabos-voile-ecrans [--delai 3.5] [--max 40] [--fenetre "VPinFE Table"] [--noir]
@@ -114,10 +115,16 @@ def composer(chemin: str, rotation: int, w: int, h: int):
     gi.require_version("GdkPixbuf", "2.0")
     from gi.repository import GdkPixbuf
     pb = GdkPixbuf.Pixbuf.new_from_file(chemin)
+    # PINCABOS_VOILE_SENS_V2 (cab de Yann, 07/09/2026)
+    # Piege : la valeur de l enumeration GdkPixbuf EST l angle ANTI-horaire.
+    # CLOCKWISE vaut donc 270 anti-horaire, soit 90 horaire — l inverse de ce que
+    # le splash fait pour la meme consigne (ffmpeg transpose=2 = 90 anti-horaire).
+    # Les deux annoncaient « 270 » et tournaient a l oppose : le visuel du voile
+    # arrivait tete en bas juste apres un splash correct.
     if rotation == 270:
-        pb = pb.rotate_simple(GdkPixbuf.PixbufRotation.CLOCKWISE)          # 270 anti-horaire
-    elif rotation == 90:
         pb = pb.rotate_simple(GdkPixbuf.PixbufRotation.COUNTERCLOCKWISE)
+    elif rotation == 90:
+        pb = pb.rotate_simple(GdkPixbuf.PixbufRotation.CLOCKWISE)
     elif rotation == 180:
         pb = pb.rotate_simple(GdkPixbuf.PixbufRotation.UPSIDEDOWN)
     echelle = min(w / pb.get_width(), h / pb.get_height())
