@@ -1,6 +1,6 @@
 """PinCabOS WebApp — page ZeDMD (USB ou Wi-Fi) pour VPX et VPinFE.
 
-PINCABOS_ZEDMD_WEB_V1
+PINCABOS_ZEDMD_WEB_V2
 
 La page n'ecrit jamais les INI elle-meme : elle modifie /opt/pincabos/config/zedmd.json
 puis appelle /opt/pincabos/tools/pincabos-zedmd (detect / status / apply / test),
@@ -17,10 +17,8 @@ CONFIG = "/opt/pincabos/config/zedmd.json"
 
 
 def _run(*args, timeout=30, privileged=False):
-    # /opt/pincabos/config appartient au groupe pinball en ecriture (tmpfiles
-    # 'z', decision du 02/09) : set / apply n'ont plus besoin de sudo — les INI
-    # sont a pinball, le port serie accessible via dialout. Le parametre
-    # `privileged` est conserve pour la signature, sans effet.
+    # /opt/pincabos/config et les INI cibles sont accessibles a pinball.
+    # `privileged` reste reserve aux operations systeme futures.
     cmd = [TOOL, *args]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
@@ -35,7 +33,7 @@ def _status():
         return json.loads(out)
     except ValueError:
         return {"config": {"mode": "off", "device": "", "wifi_addr": "", "brightness": -1,
-                           "targets": "game"}, "vpx": {}, "vpinfe": {}, "warnings": [out.strip()],
+                           "targets": "both"}, "vpx": {}, "vpinfe": {}, "warnings": [out.strip()],
                 "test_available": False}
 
 
@@ -71,12 +69,12 @@ def register(app, page, esc):
         vpx = st.get("vpx", {})
         fe = st.get("vpinfe", {})
         mode = cfg.get("mode", "off")
-        targets = cfg.get("targets", "game")
+        targets = cfg.get("targets", "both")
 
         def checked(name, value):
             return " checked" if str(cfg.get(name, "")) == value else ""
 
-        port_options = ['<option value="">Auto (VPX cherche le ZeDMD tout seul — indisponible pour le menu VPinFE)</option>']
+        port_options = ['<option value="">Auto (VPX + VPinFE/libdmdutil detectent le ZeDMD)</option>']
         for p in ports:
             path = p.get("by_id") or p["device"]
             sel = " selected" if cfg.get("device") in (path, p["device"]) else ""
@@ -102,7 +100,7 @@ def register(app, page, esc):
             if vpx else "VPinballX.ini introuvable"
         )
         fe_line = (
-            f"libdmdutil actif : <b>{yesno(fe.get('enabled'))}</b> · port : <code>{esc(fe.get('device') or '-')}</code> · "
+            f"libdmdutil actif : <b>{yesno(fe.get('enabled'))}</b> · port : <code>{esc(fe.get('device') or 'auto')}</code> · "
             f"adresse : <code>{esc(fe.get('wifi_addr') or '-')}</code>"
             if fe else "vpinfe.ini introuvable"
         )
@@ -137,13 +135,13 @@ def register(app, page, esc):
     <form method="post" action="/dmd/zedmd/apply">
       <p><b>Mode</b><br>
         <label><input type="radio" name="mode" value="off"{checked('mode','off')}> Desactive</label> &nbsp;
-        <label><input type="radio" name="mode" value="usb"{checked('mode','usb')}> ZeDMD USB (port serie)</label> &nbsp;
-        <label><input type="radio" name="mode" value="wifi"{checked('mode','wifi')}> ZeDMD Wi-Fi (reseau)</label> &nbsp;
+        <label><input type="radio" name="mode" value="usb"{checked('mode','usb')}> ZeDMD USB</label> &nbsp;
+        <label><input type="radio" name="mode" value="wifi"{checked('mode','wifi')}> ZeDMD Wi-Fi</label> &nbsp;
         <label><input type="radio" name="mode" value="pin2dmd"{checked('mode','pin2dmd')}> PIN2DMD (USB)</label>
       </p>
       <p><b>Port USB</b><br>
         <select name="device" style="width:100%;padding:6px;">{''.join(port_options)}</select><br>
-        <span class="pco-mini">Le chemin <code>/dev/serial/by-id/…</code> est stable quel que soit l'ordre de branchement. Les ports declares pour DOF (Teensy, DudesCab) sont exclus.</span>
+        <span class="pco-mini"><b>Auto est recommande.</b> Un chemin <code>/dev/serial/by-id/…</code> peut etre force comme override stable. Les ports declares pour DOF (Teensy, DudesCab) sont exclus de la liste des candidats.</span>
       </p>
       <p><b>Adresse Wi-Fi du ZeDMD</b><br>
         <input name="wifi_addr" value="{esc(cfg.get('wifi_addr',''))}" placeholder="ex. 192.168.1.50 ou zedmd-wifi.local" style="width:100%;padding:6px;">
@@ -154,7 +152,7 @@ def register(app, page, esc):
       <p><b>Ou l'utiliser</b><br>
         <label><input type="radio" name="targets" value="game"{' checked' if targets=='game' else ''}> En jeu seulement (VPX)</label><br>
         <label><input type="radio" name="targets" value="both"{' checked' if targets=='both' else ''}> Au menu VPinFE et en jeu</label><br>
-        <span class="pco-mini">Un port USB ne se partage pas : si VPinFE tient le ZeDMD au menu, VPX doit le reprendre au lancement de chaque table. En <b>Wi-Fi</b>, aucune contrainte — c'est le mode recommande pour « menu + jeu ». En USB avec le menu, un port explicite est obligatoire (VPinFE ne sait pas chercher le ZeDMD tout seul). <b>PIN2DMD : en jeu seulement</b> — la bibliotheque libdmdutil embarquee dans VPinFE n'a pas sa prise en charge.</span>
+        <span class="pco-mini">En USB, VPinFE/libdmdutil peut maintenant fonctionner en <b>auto-detection</b>. Au lancement d'une table, VPinFE libere le ZeDMD avant VPX puis le reprend au retour au menu. <b>PIN2DMD reste en jeu seulement.</b></span>
       </p>
       <p>
         <button class="button" type="submit">Enregistrer et appliquer</button>
@@ -163,7 +161,7 @@ def register(app, page, esc):
     </form>
     <form method="post" action="/dmd/zedmd/test" style="margin-top:8px;">
       <button class="button secondary" type="submit"{'' if st.get('test_available') else ' disabled'}>Tester : afficher une mire 4 s sur le ZeDMD</button>
-      <span class="pco-mini"> (ZeDMD seulement ; en USB, VPinFE doit ne pas tenir le port pendant le test : mettre « en jeu seulement » ou tester avant d'activer le menu. PIN2DMD : lancer une table pour verifier)</span>
+      <span class="pco-mini"> (ZeDMD seulement. Le test utilise le meme bridge libdmdutil et le meme mode Auto/port force que la configuration.)</span>
     </form>
   </div>
 
@@ -182,11 +180,13 @@ def register(app, page, esc):
         <tr><th style="text-align:left;padding:4px 8px">Port</th><th style="text-align:left;padding:4px 8px">ZeDMD ?</th><th style="text-align:left;padding:4px 8px">Famille</th><th style="text-align:left;padding:4px 8px">Modele</th><th style="text-align:left;padding:4px 8px">Chemin stable</th></tr>
         {rows}
       </table>
-      <p class="pco-mini">Un ZeDMD est un ESP32 : port natif Espressif (303a) ou pont serie CP210x / CH340. Le ZeDMD doit etre branche et alimente pour apparaitre.</p>
+      <p class="pco-mini">Un ZeDMD est un ESP32 : port natif Espressif (303a) ou pont serie CP210x / CH340. Ces identifiants servent de candidats ; libdmdutil effectue la connexion reelle.</p>
     </div>
     <div class="card">
       <h2>Rappels</h2>
-      <p class="pco-mini">• PIN2DMD : pris en charge par VPX (en jeu) uniquement — VPinFE n'a pas cette prise en charge dans sa bibliotheque. Acces USB donne par la regle udev livree (rebrancher le PIN2DMD apres une mise a jour qui l'installe).<br>
+      <p class="pco-mini">• ZeDMD USB : laisser le port sur <b>Auto</b> dans la majorite des cabinets.<br>
+      • Si un port doit etre verrouille : utiliser de preference <code>/dev/serial/by-id/…</code>.<br>
+      • PIN2DMD : pris en charge par VPX (en jeu) uniquement.<br>
       • Le FullDMD (ecran) reste actif independamment du ZeDMD.<br>
       • Retour : <a href="/fulldmd">FullDMD / DMD</a> · <a href="/tools">Outils</a></p>
     </div>
@@ -210,7 +210,7 @@ def register(app, page, esc):
             brightness = -1
         targets = (request.form.get("targets") or "").strip().lower()
         if targets not in ("game", "both"):
-            targets = "game" if mode in ("usb", "pin2dmd") else "both"
+            targets = "game" if mode == "pin2dmd" else "both"
         cfg = {
             "mode": mode,
             "device": (request.form.get("device") or "").strip(),

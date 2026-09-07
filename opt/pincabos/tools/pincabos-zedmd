@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """PinCabOS — DMD LED reel : ZeDMD (USB ou Wi-Fi) et PIN2DMD, pour VPX et VPinFE.
 
-PINCABOS_ZEDMD_V1 (le nom de l'outil est historique ; il couvre aussi le PIN2DMD)
+PINCABOS_ZEDMD_V2 (le nom de l'outil est historique ; il couvre aussi le PIN2DMD)
 
 Source de verite : /opt/pincabos/config/zedmd.json
     {"mode": "off|usb|wifi|pin2dmd", "device": "", "wifi_addr": "", "brightness": -1,
@@ -25,11 +25,11 @@ appeler `apply`.
   image <fichier> [secondes]   Affiche une image ajustee a la matrice (ZeDMD)
 
 Regles :
-  - VPX (plugin DMDUtil) sait chercher lui-meme le ZeDMD USB : device vide = auto.
-  - VPinFE exige un chemin de port explicite en USB.
-  - Un port USB ne se partage pas : "menu + jeu" en USB signifie que VPinFE tient
-    le port au menu ; le Wi-Fi n'a pas cette limite. Par defaut : USB -> jeu
-    seulement, Wi-Fi -> menu + jeu.
+  - VPX et VPinFE/libdmdutil savent chercher le ZeDMD USB : device vide = auto.
+  - Un port USB ne se partage pas simultanement : VPinFE libere libdmdutil avant
+    VPX et le reprend au retour au menu. USB peut donc servir au menu + au jeu.
+  - Par defaut : ZeDMD USB/Wi-Fi -> menu + jeu ; PIN2DMD -> jeu seulement.
+  - Un chemin /dev/serial/by-id/... peut etre force en override si necessaire.
 """
 import glob
 import json
@@ -88,7 +88,7 @@ def load_config():
     if data["mode"] not in MODES:
         data["mode"] = "off"
     if data["targets"] not in ("game", "both"):
-        data["targets"] = "game" if data["mode"] in ("usb", "pin2dmd") else "both"
+        data["targets"] = "game" if data["mode"] == "pin2dmd" else "both"
     try:
         data["brightness"] = int(data["brightness"])
     except (TypeError, ValueError):
@@ -116,6 +116,28 @@ def _chown_pinball(path):
             shutil.chown(path, "pinball", "pinball")
         except (OSError, LookupError):
             pass
+
+
+def ensure_pinball_serial_access():
+    """Best-effort: garantit l'acces aux tty USB sur Debian/Ubuntu.
+
+    La commande `apply` est normalement lancee via sudo par PinCabOS. Ajouter
+    pinball a dialout est idempotent. L'echec reste un avertissement afin qu'un
+    DMD debranche ne bloque jamais une mise a jour du cabinet.
+    """
+    if os.geteuid() != 0 or not shutil.which("usermod"):
+        return
+    try:
+        p = subprocess.run(["id", "-nG", "pinball"], capture_output=True, text=True, timeout=5)
+        if p.returncode == 0 and "dialout" in p.stdout.split():
+            return
+        p = subprocess.run(["usermod", "-aG", "dialout", "pinball"], capture_output=True, text=True, timeout=10)
+        if p.returncode == 0:
+            print("USB      : utilisateur pinball ajoute au groupe dialout")
+        else:
+            print("AVERTISSEMENT: impossible d'ajouter pinball a dialout : " + (p.stderr.strip() or str(p.returncode)))
+    except (OSError, subprocess.SubprocessError) as exc:
+        print(f"AVERTISSEMENT: verification dialout impossible ({exc})")
 
 
 # --- INI ---------------------------------------------------------------------
@@ -305,8 +327,6 @@ def _by_id_link(dev):
 # --- apply -------------------------------------------------------------------
 def desired_vpx_values(cfg, current):
     mode = cfg["mode"]
-    # consommateurs du plugin que cet outil ne gere pas (Pixelcade, DMDServer) :
-    # s'ils sont actifs, Enable reste a 1 meme quand notre DMD est desactive
     other_consumers = any(_truthy(current.get(k)) for k in ("pixelcade", "dmdserver"))
     if mode == "off":
         return {
@@ -326,7 +346,7 @@ def desired_vpx_values(cfg, current):
             "ZeDMDDevice": "",
             "ZeDMDWiFiAddr": "",
         }
-    values = {
+    return {
         "Enable": "1",
         "PIN2DMD": "0",
         "ZeDMD": "1",
@@ -335,11 +355,9 @@ def desired_vpx_values(cfg, current):
         "ZeDMDWiFiAddr": cfg["wifi_addr"] if mode == "wifi" else "",
         "ZeDMDBrightness": str(cfg["brightness"]) if cfg["brightness"] >= 0 else "",
     }
-    return values
 
 
 def desired_vpinfe_values(cfg):
-    # PIN2DMD : jamais au menu, la lib de VPinFE n'en a pas le code
     menu = cfg["mode"] in ("usb", "wifi") and cfg["targets"] == "both"
     if not menu:
         return {"enabled": "false", "zedmddevice": "", "zedmdwifiaddr": ""}
@@ -351,22 +369,16 @@ def desired_vpinfe_values(cfg):
 
 
 def problemes(cfg):
-    """(erreurs, avertissements).
-
-    PINCABOS_ZEDMD_APPLY_TOLERANT_V1 — les erreurs empechent toute ecriture ;
-    les avertissements ne concernent que le MENU VPinFE : le DMD est alors
-    applique a VPX (le jeu) et VPinFE reste sans DMD. Avant, un port USB laisse
-    en « auto » avec le menu coche, ou PIN2DMD avec le menu coche, faisaient
-    tout refuser : VPX restait a Enable=0 et le ZeDMD « ne marchait pas ».
-    """
+    """(erreurs, avertissements). Un DMD absent est un etat transitoire, pas une erreur."""
     erreurs, avertissements = [], []
     if cfg["mode"] == "wifi" and not re.match(r"^[A-Za-z0-9.\-]+$", cfg["wifi_addr"] or ""):
         erreurs.append("adresse Wi-Fi du ZeDMD manquante ou invalide")
     if cfg["mode"] == "usb" and cfg["device"] and not cfg["device"].startswith("/dev/"):
         erreurs.append("le port USB doit etre un chemin /dev/…")
-    if cfg["mode"] == "usb" and cfg["targets"] == "both" and not cfg["device"]:
-        avertissements.append("menu VPinFE impossible en USB sans port explicite (VPinFE ne sait "
-                              "pas chercher le ZeDMD tout seul) : ZeDMD en jeu seulement")
+    if cfg["mode"] == "usb" and cfg["device"] and not os.path.exists(cfg["device"]):
+        avertissements.append(f"port ZeDMD configure absent pour le moment : {cfg['device']}")
+    if cfg["mode"] == "usb" and not cfg["device"] and not any(d.get("candidate") for d in detect()):
+        avertissements.append("aucun port ZeDMD candidat present ; l'auto-detection USB reste active")
     if cfg["mode"] == "pin2dmd" and cfg["targets"] == "both":
         avertissements.append("PIN2DMD : en jeu seulement — la bibliotheque libdmdutil embarquee "
                               "dans VPinFE n'a pas la prise en charge PIN2DMD")
@@ -374,23 +386,22 @@ def problemes(cfg):
 
 
 def validate(cfg):
-    """Tous les problemes (erreurs + avertissements), pour la page de statut."""
     erreurs, avertissements = problemes(cfg)
     return erreurs + avertissements
 
 
 def apply(cfg):
+    ensure_pinball_serial_access()
     erreurs, avertissements = problemes(cfg)
     if erreurs:
         for e in erreurs:
             print("ERREUR: " + e)
         return 2
-    if avertissements:
-        # PINCABOS_ZEDMD_APPLY_TOLERANT_V1 : on degrade au lieu de refuser — le
-        # jeu (VPX) recoit le DMD, le menu VPinFE non ; la configuration
-        # enregistree reflete ce qui est reellement applique.
-        for a in avertissements:
-            print("AVERTISSEMENT: " + a)
+    for a in avertissements:
+        print("AVERTISSEMENT: " + a)
+    # PIN2DMD reste game-only ; ZeDMD USB/Wi-Fi conserve exactement la cible
+    # demandee, y compris USB both avec device vide (auto-detection libdmdutil).
+    if cfg["mode"] == "pin2dmd" and cfg["targets"] == "both":
         cfg = dict(cfg, targets="game")
         try:
             save_config(cfg)
@@ -454,7 +465,6 @@ def status():
             "wifi_addr": s.get("zedmdwifiaddr", ""),
         }
     out["pin2dmd"] = detect_pin2dmd()
-    # le test passe par le bridge VPinFE : ZeDMD seulement
     out["test_available"] = (
         cfg["mode"] in ("usb", "wifi")
         and os.path.isfile(os.path.join(VPINFE_DMDUTIL_DIR, "libdmdutil_wrapper.py"))
@@ -462,10 +472,22 @@ def status():
     return out
 
 
+def _controller(cfg):
+    """Construit le controller ZeDMD sans forcer de transport en mode USB auto."""
+    sys.path.insert(0, VPINFE_DMDUTIL_DIR)
+    os.environ["LD_LIBRARY_PATH"] = VPINFE_DMDUTIL_DIR + ":" + os.environ.get("LD_LIBRARY_PATH", "")
+    from libdmdutil_wrapper import DMDController  # noqa: E402
+    kwargs = {"brightness": cfg["brightness"]}
+    if cfg["mode"] == "wifi":
+        kwargs["host"] = cfg["wifi_addr"]
+    elif cfg["device"]:
+        kwargs["device"] = cfg["device"]
+    return DMDController(**kwargs)
+
+
 # --- image -------------------------------------------------------------------
 def image(chemin, seconds):
-    """PINCABOS_ZEDMD_IMAGE_V1 : affiche une image (ajustee a la matrice, bandes noires)
-    pendant `seconds` secondes, via le bridge libdmdutil de VPinFE (ZeDMD seulement)."""
+    """Affiche une image ajustee a la matrice via le bridge libdmdutil de VPinFE."""
     if not os.path.isfile(chemin):
         print(f"ERREUR: image absente : {chemin}")
         return 2
@@ -474,33 +496,21 @@ def image(chemin, seconds):
         print("ERREUR: DMD LED desactive dans la configuration")
         return 2
     if cfg["mode"] == "pin2dmd":
-        print("ERREUR: image indisponible pour le PIN2DMD (le bridge de VPinFE n'a pas PIN2DMD) — "
-              "lancer une table pour verifier")
+        print("ERREUR: image indisponible pour le PIN2DMD (bridge VPinFE sans PIN2DMD)")
         return 2
-    errors = validate(cfg)
-    if errors:
-        for e in errors:
+    erreurs, avertissements = problemes(cfg)
+    if erreurs:
+        for e in erreurs:
             print("ERREUR: " + e)
         return 2
-    if cfg["mode"] == "usb" and not cfg["device"]:
-        cands = [d for d in detect() if d["candidate"]]
-        if len(cands) != 1:
-            print("ERREUR: en USB 'auto', l image a besoin d un port explicite "
-                  f"({len(cands)} candidat(s) detecte(s))")
-            return 2
-        cfg["device"] = cands[0]["device"]
-    sys.path.insert(0, VPINFE_DMDUTIL_DIR)
-    os.environ["LD_LIBRARY_PATH"] = VPINFE_DMDUTIL_DIR + ":" + os.environ.get("LD_LIBRARY_PATH", "")
+    for a in avertissements:
+        print("AVERTISSEMENT: " + a)
     try:
-        from libdmdutil_wrapper import DMDController, load_image_frame  # noqa: E402
+        dmd = _controller(cfg)
+        from libdmdutil_wrapper import load_image_frame  # noqa: E402
     except Exception as exc:
         print(f"ERREUR: bridge libdmdutil de VPinFE indisponible ({exc})")
         return 3
-    dmd = DMDController(
-        host=cfg["wifi_addr"] if cfg["mode"] == "wifi" else None,
-        device=cfg["device"] if cfg["mode"] == "usb" else None,
-        brightness=cfg["brightness"],
-    )
     try:
         info = dmd.load()
         print(f"connecte : {info.width}x{info.height} (HD={info.has_hd_display})")
@@ -530,35 +540,21 @@ def test(seconds):
         print("ERREUR: DMD LED desactive dans la configuration")
         return 2
     if cfg["mode"] == "pin2dmd":
-        print("ERREUR: test indisponible pour le PIN2DMD (le bridge de VPinFE n'a pas PIN2DMD) — "
-              "lancer une table pour verifier")
+        print("ERREUR: test indisponible pour le PIN2DMD (bridge VPinFE sans PIN2DMD)")
         return 2
-    errors = validate(cfg)
-    if errors:
-        for e in errors:
+    erreurs, avertissements = problemes(cfg)
+    if erreurs:
+        for e in erreurs:
             print("ERREUR: " + e)
         return 2
-    if cfg["mode"] == "usb" and not cfg["device"]:
-        cands = [d for d in detect() if d["candidate"]]
-        if len(cands) != 1:
-            print("ERREUR: en USB 'auto', le test a besoin d'un port explicite "
-                  f"({len(cands)} candidat(s) detecte(s))")
-            return 2
-        cfg["device"] = cands[0]["device"]
-        print(f"port retenu pour le test : {cfg['device']}")
-    sys.path.insert(0, VPINFE_DMDUTIL_DIR)
-    os.environ["LD_LIBRARY_PATH"] = VPINFE_DMDUTIL_DIR + ":" + os.environ.get("LD_LIBRARY_PATH", "")
+    for a in avertissements:
+        print("AVERTISSEMENT: " + a)
     try:
-        from libdmdutil_wrapper import DMDController  # noqa: E402
+        dmd = _controller(cfg)
         from media import make_test_pattern  # noqa: E402
-    except Exception as exc:  # bridge absent ou dependance manquante
+    except Exception as exc:
         print(f"ERREUR: bridge libdmdutil de VPinFE indisponible ({exc})")
         return 3
-    dmd = DMDController(
-        host=cfg["wifi_addr"] if cfg["mode"] == "wifi" else None,
-        device=cfg["device"] if cfg["mode"] == "usb" else None,
-        brightness=cfg["brightness"],
-    )
     try:
         info = dmd.load()
         print(f"connecte : {info.width}x{info.height} (HD={info.has_hd_display})")
@@ -593,8 +589,6 @@ def main(argv):
     if cmd == "apply":
         return apply(load_config())
     if cmd == "set":
-        # La WebApp tourne en pinball et /opt/pincabos/config appartient a root :
-        # c'est ce script (via sudo) qui ecrit la configuration, puis la rend a pinball.
         try:
             incoming = json.loads(argv[2]) if len(argv) > 2 else json.load(sys.stdin)
         except ValueError as exc:
@@ -606,19 +600,19 @@ def main(argv):
         cfg = dict(DEFAULTS)
         cfg.update({k: incoming.get(k, v) for k, v in DEFAULTS.items()})
         save_config(cfg)
-        cfg = load_config()  # normalisation (mode, targets, luminosite)
+        cfg = load_config()
         save_config(cfg)
         print("configuration enregistree : " + json.dumps(cfg, ensure_ascii=False))
         return 0
     if cmd == "image":
-        if len(args) < 2:
+        if len(argv) < 3:
             print("usage : pincabos-zedmd image <fichier> [secondes]")
             return 2
         try:
-            secondes = int(args[2]) if len(args) > 2 else 5
+            secondes = int(argv[3]) if len(argv) > 3 else 5
         except ValueError:
             secondes = 5
-        return image(args[1], secondes)
+        return image(argv[2], secondes)
     if cmd == "test":
         try:
             seconds = float(argv[2]) if len(argv) > 2 else 4.0
