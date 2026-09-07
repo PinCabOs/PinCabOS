@@ -187,20 +187,41 @@ def outil_images(outil: str | None = None) -> str:
     return ""
 
 
+# PINCABOS_SPLASH_PALETTE_V1
+# Les visuels partaient en PNG couleurs vraies : 3,5 Mo piece, 14 images, soit
+# 40 Mo dans l initrd — l essentiel de l attente entre GRUB et le splash. Une
+# palette de 256 couleurs avec tramage les ramene a ~1,1 Mo (3,3x) sans que
+# l oeil voie la difference sur ces visuels. Plymouth sait lire le PNG a
+# palette (png_set_palette_to_rgb dans libply-splash-graphics, verifie sur le
+# cab) et ffmpeg fait tout dans la meme passe que la rotation : aucun outil
+# nouveau a embarquer.
+PALETTE_FFMPEG = ("split[a][b];[a]palettegen=max_colors=256:stats_mode=single[p];"
+                  "[b][p]paletteuse=dither=floyd_steinberg")
+PALETTE_CONVERT = ["-colors", "256", "-dither", "FloydSteinberg"]
+ROTATION_FFMPEG = {90: "transpose=1", 180: "transpose=1,transpose=1", 270: "transpose=2"}
+
+
+def filtre_ffmpeg(degres: int = 0) -> str:
+    """Chaine ffmpeg : la rotation eventuelle, puis la palette."""
+    tourne = ROTATION_FFMPEG.get(degres % 360, "")
+    return f"{tourne},{PALETTE_FFMPEG}" if tourne else PALETTE_FFMPEG
+
+
 def commande_rotation(src: Path, dst: Path, degres: int, outil: str | None = None) -> list | None:
     """La commande qui tourne src de `degres` dans le sens horaire vers dst.
 
     ffmpeg : transpose=1 = 90 horaire, transpose=2 = 90 anti-horaire (= 270).
     ImageMagick : -rotate N = N degres horaires.
+    La sortie est palettisee au passage (PINCABOS_SPLASH_PALETTE_V1).
     """
     if degres % 360 == 0:
         return None
     outil = outil_images(outil)
     if outil == "ffmpeg":
-        vf = {90: "transpose=1", 180: "transpose=1,transpose=1", 270: "transpose=2"}[degres % 360]
-        return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), "-vf", vf, str(dst)]
+        return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
+                "-filter_complex", filtre_ffmpeg(degres), str(dst)]
     if outil == "convert":
-        return ["convert", str(src), "-rotate", str(degres % 360), str(dst)]
+        return ["convert", str(src), "-rotate", str(degres % 360), *PALETTE_CONVERT, f"PNG8:{dst}"]
     return []
 
 
@@ -263,15 +284,18 @@ def sources_images(theme_dir: Path = THEME_DIR, portrait: Path = PORTRAIT, paysa
 
 
 def commande_conversion(src: Path, dst: Path, outil: str | None = None) -> list | None:
-    """JPEG -> PNG (Plymouth ne lit que le PNG) ; None si deja du PNG."""
-    if src.suffix.lower() == ".png":
-        return None
+    """Vers le PNG a palette que Plymouth lit (il ne lit que le PNG).
+
+    Sans outil, une source PNG est recopiee telle quelle (None) et une source
+    JPEG est abandonnee ([]) : c est le comportement d avant la palette.
+    """
     outil = outil_images(outil)
     if outil == "ffmpeg":
-        return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src), str(dst)]
+        return ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", str(src),
+                "-filter_complex", filtre_ffmpeg(), str(dst)]
     if outil == "convert":
-        return ["convert", str(src), str(dst)]
-    return []
+        return ["convert", str(src), *PALETTE_CONVERT, f"PNG8:{dst}"]
+    return None if src.suffix.lower() == ".png" else []
 
 
 def png_uni(chemin: Path, rgba=(0, 0, 0, 255), taille: int = 8):

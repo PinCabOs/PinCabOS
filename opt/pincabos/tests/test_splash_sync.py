@@ -54,27 +54,31 @@ class Images(unittest.TestCase):
     def test_portrait_pre_tourne_pour_le_playfield(self):
         r = ss.preparer_images(0, theme_dir=self.theme, run=self.run_ok, portrait=self.portrait, paysage=self.paysage, outil="ffmpeg")
         self.assertEqual((r["genre_playfield"], r["genre_autres"], r["rot"], r["pre_tourne"]), ("portrait", "paysage", 270, 1))
-        self.assertEqual(len(self.appels), 1)
+        # PINCABOS_SPLASH_PALETTE_V1 : le paysage passe par l outil lui aussi
+        # (palette), la ou une source PNG etait recopiee telle quelle.
+        self.assertEqual(len(self.appels), 2)
         cmd = self.appels[0]
         self.assertIn(cmd[0], ("ffmpeg", "convert"))
         if cmd[0] == "ffmpeg":
-            self.assertIn("transpose=2", cmd)      # 270 = anti-horaire
+            self.assertIn("transpose=2", " ".join(cmd))      # 270 = anti-horaire
+            self.assertIn("paletteuse", " ".join(cmd))
         else:
             self.assertEqual(cmd[cmd.index("-rotate") + 1], "270")
         self.assertEqual((self.theme / ss.IMAGE_PLAYFIELD).read_bytes(), b"TOURNE")
-        self.assertEqual((self.theme / ss.IMAGE_AUTRES).read_bytes(), b"PAYSAGE")
+        self.assertEqual((self.theme / ss.IMAGE_AUTRES).read_bytes(), b"TOURNE")
 
     def test_dalle_a_l_envers(self):
         r = ss.preparer_images(180, theme_dir=self.theme, run=self.run_ok, portrait=self.portrait, paysage=self.paysage, outil="ffmpeg")
         self.assertEqual(r["rot"], 90)
-        self.assertTrue("transpose=1" in self.appels[0] or "90" in self.appels[0])
+        self.assertTrue("transpose=1" in " ".join(self.appels[0]) or "90" in self.appels[0])
 
     def test_sans_visuels_karots_comportement_historique(self):
         r = ss.preparer_images(0, theme_dir=self.theme, run=self.run_ok,
                                portrait=self.tmp / "absent.png", paysage=self.tmp / "absent2.png")
         self.assertEqual((r["genre_playfield"], r["genre_autres"], r["rot"]), ("historique", "historique", 0))
-        self.assertEqual(self.appels, [])   # rotation 0 : simple copie
-        self.assertEqual((self.theme / ss.IMAGE_PLAYFIELD).read_bytes(), b"HISTORIQUE")
+        # rotation 0 : plus de rotation, mais la palette passe quand meme
+        self.assertTrue(all("paletteuse" in " ".join(a) for a in self.appels), self.appels)
+        self.assertTrue(all("transpose" not in " ".join(a) for a in self.appels), self.appels)
         r = ss.preparer_images(180, theme_dir=self.theme, run=self.run_ok,
                                portrait=self.tmp / "absent.png", paysage=self.tmp / "absent2.png")
         self.assertEqual(r["rot"], 180)    # l historique suit X11, jamais plus
@@ -145,10 +149,53 @@ class Images(unittest.TestCase):
 
     def test_commande_rotation(self):
         self.assertEqual(ss.commande_rotation(Path("a"), Path("b"), 270, outil=""), [])   # sans outil : Plymouth tournera
-        self.assertIn("transpose=2", ss.commande_rotation(Path("a"), Path("b"), 270, outil="ffmpeg"))
+        self.assertIn("transpose=2", " ".join(ss.commande_rotation(Path("a"), Path("b"), 270, outil="ffmpeg")))
         self.assertEqual(ss.commande_rotation(Path("a"), Path("b"), 90, outil="convert")[2:4], ["-rotate", "90"])
         self.assertIsNone(ss.commande_rotation(Path("a"), Path("b"), 0))
         self.assertIsNone(ss.commande_rotation(Path("a"), Path("b"), 360))
+
+
+class Palette(unittest.TestCase):
+    """PINCABOS_SPLASH_PALETTE_V1 — 40 Mo de PNG dans l initrd, l essentiel de
+    l attente entre GRUB et le splash. La palette de 256 couleurs les divise
+    par 3,3 sans que l oeil voie la difference (mesure sur le cab de Yann :
+    3 565 253 -> 1 069 878 octets)."""
+
+    def test_la_rotation_et_la_palette_dans_la_meme_passe(self):
+        """Deux passes ffmpeg couteraient un aller-retour disque par image."""
+        f = ss.filtre_ffmpeg(270)
+        self.assertTrue(f.startswith("transpose=2,"), f)
+        self.assertIn("palettegen=max_colors=256", f)
+        self.assertIn("paletteuse=dither=floyd_steinberg", f)
+
+    def test_sans_rotation_la_palette_reste(self):
+        f = ss.filtre_ffmpeg()
+        self.assertNotIn("transpose", f)
+        self.assertIn("palettegen", f)
+        self.assertEqual(ss.filtre_ffmpeg(0), f)
+        self.assertEqual(ss.filtre_ffmpeg(360), f)
+
+    def test_une_seule_commande_ffmpeg(self):
+        cmd = ss.commande_rotation(Path("a"), Path("b"), 270, outil="ffmpeg")
+        self.assertEqual(cmd.count("-i"), 1, "une seule entree, donc une seule passe")
+        self.assertIn("-filter_complex", cmd)
+
+    def test_imagemagick_sort_du_png8(self):
+        """PNG8 = palettise ; sans le prefixe, convert reecrit en couleurs vraies."""
+        cmd = ss.commande_conversion(Path("a"), Path("b.png"), outil="convert")
+        self.assertTrue(cmd[-1].startswith("PNG8:"), cmd)
+        self.assertIn("-colors", cmd)
+        cmd = ss.commande_rotation(Path("a"), Path("b.png"), 90, outil="convert")
+        self.assertTrue(cmd[-1].startswith("PNG8:"), cmd)
+
+    def test_les_sources_png_passent_aussi_par_la_palette(self):
+        """Avant, un PNG etait recopie tel quel : c est lui le plus lourd."""
+        self.assertIsNotNone(ss.commande_conversion(Path("a.png"), Path("b.png"), outil="ffmpeg"))
+
+    def test_sans_outil_le_comportement_d_avant(self):
+        """Un PNG se recopie (None), un JPEG s abandonne ([]) : rien ne bloque."""
+        self.assertIsNone(ss.commande_conversion(Path("a.png"), Path("b.png"), outil=""))
+        self.assertEqual(ss.commande_conversion(Path("a.jpg"), Path("b.png"), outil=""), [])
 
 
 class Theme(unittest.TestCase):

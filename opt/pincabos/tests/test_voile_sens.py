@@ -34,9 +34,9 @@ def rotations_du_voile() -> dict:
 
 
 def rotations_du_splash() -> dict:
-    """{consigne en degres: filtre ffmpeg}."""
+    """{consigne en degres: filtre ffmpeg}, lue dans ROTATION_FFMPEG."""
     texte = SPLASH.read_text(encoding="utf-8")
-    ligne = re.search(r"vf = \{(.+?)\}\[degres % 360\]", texte, re.S)
+    ligne = re.search(r"ROTATION_FFMPEG = \{(.+?)\}", texte, re.S)
     assert ligne, "table de rotation ffmpeg introuvable"
     return dict((int(d), f) for d, f in re.findall(r"(\d+): \"([^\"]+)\"", ligne.group(1)))
 
