@@ -26,10 +26,11 @@ if [ "${PCO_PATHS_LOADED:-0}" != "1" ]; then
         if [ ! -x "$PCO_VPX_BIN" ] && [ -x "$PCO_VPX_LINK_HOME/VPinballX_BGFX" ]; then
             export PCO_VPX_LINK="$PCO_VPX_LINK_HOME" PCO_VPX_BIN="$PCO_VPX_LINK_HOME/VPinballX_BGFX" PCO_VPX_PLUGINS="$PCO_VPX_LINK_HOME/plugins"
         fi
-        # PINCABOS_VPX_LINK_V1 : lien absent (image nue) -> le bundle le plus recent
+        # PINCABOS_RUNTIME_ROTATION_V1 : /opt/pinball/vpx est un dossier ordinaire.
+        # Une image nue peut encore porter un bundle versionne : on le nomme vpx.
         if [ ! -x "$PCO_VPX_BIN" ] && [ -w "$PCO_RUNTIMES" ]; then
             _pco_vpx_dir="$(ls -d "$PCO_RUNTIMES"/VPinballX_BGFX-*/ 2>/dev/null | sort -V | tail -1)"
-            [ -n "$_pco_vpx_dir" ] && ln -sfn "$(basename "$_pco_vpx_dir")" "$PCO_VPX_LINK" 2>/dev/null
+            [ -n "$_pco_vpx_dir" ] && [ ! -e "$PCO_VPX_LINK" ] && mv "${_pco_vpx_dir%/}" "$PCO_VPX_LINK" 2>/dev/null
             unset _pco_vpx_dir
         fi
         export PCO_VPX_PREF=/home/pinball/.pincabos/vpx PCO_VPX_INI=/home/pinball/.pincabos/vpx/VPinballX.ini

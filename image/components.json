@@ -1,6 +1,6 @@
 {
   "schema": "pincabos.image-components/v1",
-  "note": "Composants tiers de l'image PinCabOS : version epinglee et somme SHA-256 des archives officielles. Mettre a jour = changer url + sha256 (python3 image/fetch_components.py verify). PINCABOS_RUNTIMES_OPT_V1 : les runtimes vivent sous /opt/pinball (runtimes_dir, propriete du joueur), le compte du joueur garde des liens de compatibilite.",
+  "note": "Composants tiers de l'image PinCabOS : version epinglee et somme SHA-256 des archives officielles. Mettre a jour = changer url + sha256 (python3 image/fetch_components.py verify). PINCABOS_RUNTIMES_OPT_V1 : les runtimes vivent sous /opt/pinball (runtimes_dir, propriete du joueur), le compte du joueur garde des liens de compatibilite. PINCABOS_RUNTIME_ROTATION_V1 : le dossier porte son nom (vpx, vpinfe) et la version est ecrite dans .pincabos-version.",
   "runtimes_dir": "opt/pinball",
   "components": {
     "vpx": {
@@ -9,12 +9,12 @@
       "url": "https://github.com/vpinball/vpinball/releases/download/v10.8.1-5436-af26b2d93/VPinballX_BGFX-10.8.1-5436-af26b2d93-linux-x64-Release.tar.gz",
       "archive": "VPinballX_BGFX-10.8.1-5436-af26b2d93-linux-x64-Release.tar.gz",
       "sha256": "9d3f9793b0c8ebc3e53cea42e9963beeb5305a259f830d87cab9f1cda6c81a5d",
-      "install": "opt/pinball/VPinballX_BGFX-10.8.1-5436-af26b2d93-linux-x64",
+      "install": "opt/pinball/vpx",
       "check": "VPinballX_BGFX",
       "links": {
-        "opt/pinball/vpx": "VPinballX_BGFX-10.8.1-5436-af26b2d93-linux-x64",
         "home/pinball/vpx": "/opt/pinball/vpx"
-      }
+      },
+      "version": "10.8.1-5436-af26b2d93"
     },
     "vpinfe": {
       "kind": "bundle",
@@ -26,7 +26,8 @@
       "check": "vpinfe",
       "links": {
         "home/pinball/vpinfe": "/opt/pinball/vpinfe"
-      }
+      },
+      "version": "2.6.1"
     },
     "libdof": {
       "kind": "repo-file",
@@ -34,8 +35,8 @@
       "source": "opt/pincabos/overlays/libdof-canonical/libdof.so.0.4.7",
       "md5": "a9b6253a784a93b059b4f42431fd9f4a",
       "copies": [
-        "opt/pinball/VPinballX_BGFX-10.8.1-5436-af26b2d93-linux-x64/plugins/dof/libdof.so.0.4.7",
-        "opt/pinball/VPinballX_BGFX-10.8.1-5436-af26b2d93-linux-x64/plugins/dof/libdof.so"
+        "opt/pinball/vpx/plugins/dof/libdof.so.0.4.7",
+        "opt/pinball/vpx/plugins/dof/libdof.so"
       ],
       "links": {
         "opt/pinball/vpinfe/_internal/libdof.so": "/opt/pincabos/overlays/vpinfe-dof-ledwiz-hidraw-stable/libdof.so.0.4.7",

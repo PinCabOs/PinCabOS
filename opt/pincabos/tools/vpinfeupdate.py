@@ -46,6 +46,20 @@ GROUP = "pinball"
 MAX_ARCHIVE_BYTES = 2 * 1024 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 6 * 1024 * 1024 * 1024
 
+def ecrire_version_posee(dossier: Path, tag: str, source: str, sha: str) -> None:
+    """PINCABOS_RUNTIME_ROTATION_V1 : VPinFE ne livre ni VERSION ni version.txt, donc
+    la version remontee au serveur etait vide. On la depose comme pour VPX."""
+    try:
+        if "/opt/pincabos/tools" not in sys.path:
+            sys.path.insert(0, "/opt/pincabos/tools")
+        from pincabos_runtimes import ecrire_version
+        # chown_tree() passe juste apres et remet tout le dossier au joueur.
+        ecrire_version(dossier, tag.lstrip("v"), composant="vpinfe", source=source,
+                       sha256=sha, pose_par="vpinfeupdate.py")
+    except Exception as exc:  # la mise a jour vaut mieux qu un fichier d etiquette
+        log(f"AVERTISSEMENT : version non ecrite ({exc})")
+
+
 def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat()
 
@@ -483,6 +497,8 @@ def run_update() -> int:
             validate_install_root(source_root)
             shutil.move(str(source_root), str(candidate_install))
             validate_install_root(candidate_install)
+            ecrire_version_posee(candidate_install, str(remote["tag"]),
+                                 str(remote.get("asset_url") or REPO_API), archive_sha)
             chown_tree(candidate_install)
 
             if was_active:

@@ -6,6 +6,7 @@ deux liens de compatibilite (~/vpx, ~/vpinfe). Un cabinet installe avant est
 migre par pincabos-runtimes-opt (un rename, aucune copie) au demarrage,
 avant VPinFE et la WebApp.
 """
+import json
 import os
 import re
 import subprocess
@@ -107,8 +108,9 @@ class Migration(unittest.TestCase):
         subprocess.run(["rm", "-rf", str(self.tmp)])
 
     def migrer(self, *args):
+        env = dict(os.environ, PCO_TOOLS=str(R / "opt/pincabos/tools"))
         return subprocess.run(["bash", str(MIGRATEUR), "--racine", str(self.tmp), "--uid", self.uid, "--gid", self.gid, *args],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, env=env)
 
     def test_syntaxe_et_aide(self):
         self.assertEqual(subprocess.run(["bash", "-n", str(MIGRATEUR)]).returncode, 0)
@@ -122,13 +124,17 @@ class Migration(unittest.TestCase):
         r = self.migrer()
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         d = self.tmp / "opt/pinball"
-        # les runtimes ont bouge, tels quels
-        self.assertTrue((d / bundle / "VPinballX_BGFX").is_file())
-        self.assertTrue((d / bundle / "plugins/dof/libdof.so").is_file())
+        # PINCABOS_RUNTIME_ROTATION_V1 : le dossier de production porte son nom
+        self.assertTrue((d / "vpx" / "VPinballX_BGFX").is_file())
+        self.assertTrue((d / "vpx" / "plugins/dof/libdof.so").is_file())
+        self.assertFalse((d / "vpx").is_symlink(), "plus de lien symbolique")
+        self.assertFalse((d / bundle).exists(), "le bundle versionne a ete renomme")
         self.assertTrue((d / "vpinfe/vpinfe").is_file()); self.assertTrue((d / "vpinfe/_internal").is_dir())
         self.assertFalse((h / bundle).exists(), "plus de bundle dans le compte")
-        # le lien stable vit a cote des bundles, relatif (le lien du compte le disait deja)
-        self.assertEqual(os.readlink(d / "vpx"), bundle)
+        # la version, qui vivait dans le nom, est conservee dans le dossier
+        version = json.loads((d / "vpx" / ".pincabos-version").read_text(encoding="utf-8"))
+        self.assertEqual(version["version"], "10.8.1-5436-af26b2d93")
+        self.assertEqual(version["composant"], "vpx")
         # le compte garde deux liens de compatibilite, absolus vers /opt/pinball
         self.assertEqual(os.readlink(h / "vpx"), "/opt/pinball/vpx")
         self.assertEqual(os.readlink(h / "vpinfe"), "/opt/pinball/vpinfe")
@@ -136,7 +142,7 @@ class Migration(unittest.TestCase):
             self.assertEqual(os.lstat(lien).st_uid, int(self.uid), f"le lien {lien} appartient au joueur (lchown, pas chown -h)")
         # le reste du compte n'a pas bouge
         self.assertTrue((h / "Tables").is_dir()); self.assertTrue((h / ".config/vpinfe/vpinfe.ini").is_file())
-        self.assertIn("VPX " + bundle + " -> /opt/pinball", r.stdout); self.assertIn("VPinFE -> /opt/pinball/vpinfe", r.stdout)
+        self.assertIn("VPinFE -> /opt/pinball/vpinfe", r.stdout)
         # idempotent : une seconde passe ne touche a rien
         avant = _etat(self.tmp)
         r2 = self.migrer()
@@ -152,24 +158,24 @@ class Migration(unittest.TestCase):
 
     def test_installation_neuve(self):
         """Image faite par la recette : deja sous /opt/pinball, liens du compte poses."""
-        bundle = "VPinballX_BGFX-1-linux-x64"
         d = self.tmp / "opt/pinball"; h = self.tmp / "home/pinball"
-        (d / bundle).mkdir(parents=True); (d / bundle / "VPinballX_BGFX").write_text("vpx")
-        os.symlink(bundle, d / "vpx"); (d / "vpinfe").mkdir(); (d / "vpinfe/vpinfe").write_text("fe")
+        (d / "vpx").mkdir(parents=True); (d / "vpx" / "VPinballX_BGFX").write_text("vpx")
+        (d / "vpinfe").mkdir(); (d / "vpinfe/vpinfe").write_text("fe")
         h.mkdir(parents=True); os.symlink("/opt/pinball/vpx", h / "vpx"); os.symlink("/opt/pinball/vpinfe", h / "vpinfe")
         avant = _etat(self.tmp)
         r = self.migrer()
         self.assertEqual(r.returncode, 0, r.stderr); self.assertIn("rien a faire", r.stdout); self.assertEqual(_etat(self.tmp), avant)
 
     def test_liens_du_compte_absents(self):
-        """Runtimes sous /opt/pinball mais compte sans liens (payload ancien recette) : les liens sont poses, lien vpx choisi."""
+        """Bundles versionnes restes a cote : le plus recent devient vpx, le precedent vpx.bak."""
         d = self.tmp / "opt/pinball"; h = self.tmp / "home/pinball"
         for b in ("VPinballX_BGFX-10.8.1-5231-x-linux-x64", "VPinballX_BGFX-10.8.1-5436-y-linux-x64"):
-            (d / b).mkdir(parents=True); (d / b / "VPinballX_BGFX").write_text("vpx")
+            (d / b).mkdir(parents=True); (d / b / "VPinballX_BGFX").write_text(b)
         (d / "vpinfe").mkdir(); (d / "vpinfe/vpinfe").write_text("fe"); h.mkdir(parents=True)
         r = self.migrer()
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(os.readlink(d / "vpx"), "VPinballX_BGFX-10.8.1-5436-y-linux-x64", "le plus recent")
+        self.assertEqual((d / "vpx" / "VPinballX_BGFX").read_text(), "VPinballX_BGFX-10.8.1-5436-y-linux-x64", "le plus recent")
+        self.assertEqual((d / "vpx.bak" / "VPinballX_BGFX").read_text(), "VPinballX_BGFX-10.8.1-5231-x-linux-x64", "le precedent en reserve")
         self.assertEqual(os.readlink(h / "vpx"), "/opt/pinball/vpx"); self.assertEqual(os.readlink(h / "vpinfe"), "/opt/pinball/vpinfe")
 
     def test_doublon_ecarte(self):

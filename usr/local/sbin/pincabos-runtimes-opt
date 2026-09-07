@@ -95,18 +95,62 @@ for b in "$H"/VPinballX_BGFX-*; do
         log "VPX $(basename "$b") -> $DEST_REL"
     fi
 done
-if [ -L "$H/vpx" ] && [ "$(readlink "$H/vpx")" != "$DEST_REL/vpx" ]; then
-    nom="$(basename "$(readlink "$H/vpx")")"
-    [ -d "$D/$nom" ] && lien "$nom" "$D/vpx"
+# PINCABOS_RUNTIME_ROTATION_V1 : la version vivait dans le nom du bundle ; elle
+# est conservee dans .pincabos-version, seule source apres le renommage.
+poser_version() {   # poser_version <dossier> <nom du bundle d origine>
+    local dossier="$1" nom="$2" version
+    version="$(printf '%s' "$nom" | sed -n 's/^VPinballX_BGFX-\(.*\)-linux-x64$/\1/p')"
+    [ "$DRY" -eq 0 ] || return 0
+    [ -n "$version" ] || return 0
+    [ -f "$dossier/.pincabos-version" ] && return 0
+    python3 - "$dossier" "$version" <<'PY' || true
+import os
+import sys
+sys.path.insert(0, os.environ.get("PCO_TOOLS", "/opt/pincabos/tools"))
+from pincabos_runtimes import ecrire_version
+ecrire_version(sys.argv[1], sys.argv[2], composant="vpx", pose_par="pincabos-runtimes-opt")
+PY
+    log "version $version conservee dans $(basename "$dossier")/.pincabos-version"
+}
+
+# PINCABOS_RUNTIME_ROTATION_V1 : le dossier de production porte son nom. Un
+# cabinet installe avant portait un lien vpx vers VPinballX_BGFX-<version> : on
+# renomme le bundle en vpx et le lien disparait. La version, qui vivait dans le
+# nom, est ecrite dans .pincabos-version pour ne pas etre perdue.
+if [ -L "$D/vpx" ]; then
+    nom="$(basename "$(readlink "$D/vpx")")"
+    run rm -f "$D/vpx"
+    if [ -d "$D/$nom" ]; then
+        run mv "$D/$nom" "$D/vpx"
+        log "VPX $nom -> vpx"
+        poser_version "$D/vpx" "$nom"
+    fi
 fi
+# bundles restes a cote (versions precedentes de l ancien modele) : la plus
+# recente devient la sauvegarde, les autres sont laissees telles quelles.
 if [ ! -e "$D/vpx/VPinballX_BGFX" ]; then
     plus_recent="$(ls -d "$D"/VPinballX_BGFX-*/ 2>/dev/null | sort -V | tail -1 || true)"
-    [ -n "$plus_recent" ] && lien "$(basename "$plus_recent")" "$D/vpx"
+    if [ -n "$plus_recent" ]; then
+        nom_bundle="$(basename "${plus_recent%/}")"
+        run mv "${plus_recent%/}" "$D/vpx"
+        log "VPX $nom_bundle -> vpx"
+        poser_version "$D/vpx" "$nom_bundle"
+    fi
+fi
+if [ ! -e "$D/vpx.bak" ]; then
+    precedent="$(ls -d "$D"/VPinballX_BGFX-*/ 2>/dev/null | sort -V | tail -1 || true)"
+    if [ -n "$precedent" ]; then
+        nom_bundle="$(basename "${precedent%/}")"
+        run mv "${precedent%/}" "$D/vpx.bak"
+        poser_version "$D/vpx.bak" "$nom_bundle"
+        log "version precedente conservee : vpx.bak"
+    fi
 fi
 if present "$D/vpx"; then
     if [ -d "$H/vpx" ] && [ ! -L "$H/vpx" ]; then ecarter "$H/vpx"; fi
     lien "$DEST_REL/vpx" "$H/vpx"
 fi
+[ -d "$D/vpx" ] && [ "$DRY" -eq 0 ] && chown -R "$UID_P:$GID_P" "$D/vpx" 2>/dev/null || true
 
 # --- VPinFE --------------------------------------------------------------------
 if [ -d "$H/vpinfe" ] && [ ! -L "$H/vpinfe" ]; then

@@ -7,16 +7,20 @@ VPX-BGFX etait le seul moteur sans mise a jour dans l'interface : l'upgrade se
 faisait a la main (tar + symlink ~/vpx). Cet updater le fait proprement, sur le
 modele de l'updater vpxtool/VPinFE :
 
-  * la version installee se lit sur la cible du symlink ~/vpx
-    (VPinballX_BGFX-<version>-linux-x64) ;
+  * la version installee se lit dans /opt/pinball/vpx/.pincabos-version ;
   * la cible est la DERNIERE release vpinball/vpinball qui n'est PAS marquee
     'DO NOT USE' ; on prend son asset BGFX linux x64 ;
-  * l'install telecharge l'asset, l'extrait, et bascule ~/vpx par ln atomique.
-    L'ancienne version est conservee pour le rollback.
+  * l'install telecharge l'asset, l'extrait a cote sous vpx.new, puis fait
+    tourner les noms : l'ancienne version devient vpx.bak, l'avant-derniere
+    vpx.bak2. Le rollback refait le chemin inverse.
 
-Tout tourne en compte pinball : le lien vpx et les dossiers VPinballX_BGFX-*
-sont sous /opt/pinball (PINCABOS_RUNTIMES_OPT_V1, propriete du joueur). Les
-preferences VPX sont decouplees (PrefPath), donc preservees.
+Tout tourne en compte pinball : /opt/pinball/vpx est un dossier ordinaire
+(PINCABOS_RUNTIMES_OPT_V1, propriete du joueur). Les preferences VPX sont
+decouplees (PrefPath), donc preservees.
+
+PINCABOS_RUNTIME_ROTATION_V1 : le dossier de production porte son nom, jamais sa
+version. La version se lit dans .pincabos-version, et la reversibilite vient de
+la rotation vpx / vpx.bak / vpx.bak2 (pincabos_runtimes).
 
   pincabos-vpx-update --status | --check | --install | --rollback
 """
@@ -34,6 +38,10 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, "/opt/pincabos/tools")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import pincabos_runtimes as runtimes  # noqa: E402
+
 
 def _pco_chemin(cle, defaut):
     """PINCABOS_RUNTIMES_OPT_V1 : chemin de pincabos_paths (source de verite), sinon la valeur livree."""
@@ -46,8 +54,9 @@ def _pco_chemin(cle, defaut):
     except Exception:  # hors cab (tests, banc)
         return defaut
 
-LIEN = Path(_pco_chemin("vpx_link", "/opt/pinball/vpx"))
-RUNTIMES = LIEN.parent
+DOSSIER = Path(_pco_chemin("vpx_link", "/opt/pinball/vpx"))
+RUNTIMES = DOSSIER.parent
+NOUVEAU = DOSSIER.with_name(DOSSIER.name + ".new")
 LOCK = Path("/run/lock/pincabos-vpx-update.lock")
 API = "https://api.github.com/repos/vpinball/vpinball/releases?per_page=20"
 PREFIXE = "VPinballX_BGFX-"
@@ -66,9 +75,17 @@ def _version_depuis_nom(nom: str) -> str | None:
 
 
 def installee() -> str | None:
-    if not (LIEN.is_symlink() or LIEN.exists()):
+    """La version en place : .pincabos-version, sinon l ancien nom versionne.
+
+    Le repli sert aux cabinets pas encore passes a la rotation : leur vpx est
+    encore un lien vers VPinballX_BGFX-<version>-linux-x64.
+    """
+    if not (DOSSIER.is_symlink() or DOSSIER.exists()):
         return None
-    return _version_depuis_nom(os.path.basename(os.path.realpath(str(LIEN))))
+    version = runtimes.version_de(DOSSIER)
+    if version:
+        return version
+    return _version_depuis_nom(os.path.basename(os.path.realpath(str(DOSSIER))))
 
 
 def derniere() -> tuple:
@@ -101,29 +118,13 @@ def etat() -> dict:
         "available": version,
         "up_to_date": bool(inst) and inst == version,
         "release_url": url,
+        "rollback": [runtimes.version_de(p) or p.name for p in runtimes.sauvegardes(DOSSIER)],
         "ok": True,
     }
 
 
-def _dossiers_version() -> list[Path]:
-    return sorted(
-        (p for p in RUNTIMES.iterdir()
-         if p.is_dir() and not p.is_symlink()
-         and p.name.startswith(PREFIXE) and (p / "VPinballX_BGFX").is_file()),
-        key=lambda p: p.stat().st_mtime,
-    )
-
-
-def _basculer(dossier: Path) -> None:
-    tmp = RUNTIMES / ".vpx.new"
-    if tmp.is_symlink() or tmp.exists():
-        tmp.unlink()
-    tmp.symlink_to(dossier.name)  # lien relatif, a cote des bundles
-    os.replace(tmp, LIEN)
-
-
-def _valider() -> None:
-    binaire = LIEN / "VPinballX_BGFX"
+def _valider(dossier: Path = None) -> None:
+    binaire = (dossier or DOSSIER) / "VPinballX_BGFX"
     if not binaire.is_file() or not os.access(binaire, os.X_OK):
         raise RuntimeError("VPinballX_BGFX absent ou non executable apres pose")
 
@@ -137,55 +138,52 @@ def installer() -> int:
         print(f"VPX-BGFX {version} deja installe")
         return 0
 
-    cible = RUNTIMES / f"VPinballX_BGFX-{version}-linux-x64"
+    print(f"telechargement de VPX-BGFX {version} ({(taille or 0)//(1<<20)} Mo)...")
+    with tempfile.TemporaryDirectory(dir=str(RUNTIMES), prefix=".vpx-dl-") as tmp:
+        archive = Path(tmp) / "vpx.tar.gz"
+        with urllib.request.urlopen(_req(url), timeout=600) as r, \
+                archive.open("wb") as f:
+            shutil.copyfileobj(r, f, length=1 << 20)
+        if taille and archive.stat().st_size != taille:
+            print("NOGO: taille telechargee incoherente")
+            return 1
+        subprocess.run(["gzip", "-t", str(archive)], check=True)  # integrite
+        extrait = Path(tmp) / "x"
+        extrait.mkdir()
+        subprocess.run(["tar", "-xzf", str(archive), "-C", str(extrait)],
+                       check=True)
+        binaire = next(extrait.rglob("VPinballX_BGFX"), None)
+        if binaire is None or not binaire.is_file():
+            print("NOGO: VPinballX_BGFX absent de l'archive")
+            return 1
+        racine = binaire.parent
+        if NOUVEAU.exists():
+            shutil.rmtree(NOUVEAU)
+        shutil.move(str(racine), str(NOUVEAU))
 
-    if not (cible / "VPinballX_BGFX").is_file():
-        print(f"telechargement de VPX-BGFX {version} ({(taille or 0)//(1<<20)} Mo)...")
-        with tempfile.TemporaryDirectory(dir=str(RUNTIMES), prefix=".vpx-dl-") as tmp:
-            archive = Path(tmp) / "vpx.tar.gz"
-            with urllib.request.urlopen(_req(url), timeout=600) as r, \
-                    archive.open("wb") as f:
-                shutil.copyfileobj(r, f, length=1 << 20)
-            if taille and archive.stat().st_size != taille:
-                print("NOGO: taille telechargee incoherente")
-                return 1
-            subprocess.run(["gzip", "-t", str(archive)], check=True)  # integrite
-            extrait = Path(tmp) / "x"
-            extrait.mkdir()
-            subprocess.run(["tar", "-xzf", str(archive), "-C", str(extrait)],
-                           check=True)
-            binaire = next(extrait.rglob("VPinballX_BGFX"), None)
-            if binaire is None or not binaire.is_file():
-                print("NOGO: VPinballX_BGFX absent de l'archive")
-                return 1
-            racine = binaire.parent
-            if cible.exists():
-                shutil.rmtree(cible)
-            shutil.move(str(racine), str(cible))
-
-    (cible / "VPinballX_BGFX").chmod(0o755)
-    _basculer(cible)
+    (NOUVEAU / "VPinballX_BGFX").chmod(0o755)
+    _valider(NOUVEAU)
+    runtimes.ecrire_version(NOUVEAU, version, composant="vpx", source=url,
+                            pose_par="pincabos-vpx-update")
+    for ligne in runtimes.poser(DOSSIER, NOUVEAU):
+        print("  " + ligne)
     _valider()
 
-    # ne garder que les 2 dernieres versions.
-    for vieux in _dossiers_version()[:-2]:
-        if os.path.realpath(str(LIEN)) != str(vieux):
-            shutil.rmtree(vieux, ignore_errors=True)
-
-    print(f"VPX-BGFX {version} installe ; ~/vpx bascule")
+    print(f"VPX-BGFX {version} installe ; versions conservees : "
+          + ", ".join(runtimes.version_de(p) or p.name for p in runtimes.sauvegardes(DOSSIER)))
     return 0
 
 
 def rollback() -> int:
-    courant = os.path.basename(os.path.realpath(str(LIEN))) if LIEN.is_symlink() else None
-    precedents = [d for d in _dossiers_version() if d.name != courant]
-    if not precedents:
-        print("NOGO: pas de version precedente conservee")
+    try:
+        lignes = runtimes.revenir(DOSSIER)
+    except runtimes.RotationError as exc:
+        print(f"NOGO: {exc}")
         return 1
-    cible = precedents[-1]
-    _basculer(cible)
+    for ligne in lignes:
+        print("  " + ligne)
     _valider()
-    print(f"rebascule sur {cible.name}")
+    print(f"revenu a VPX-BGFX {installee() or '(version inconnue)'}")
     return 0
 
 
