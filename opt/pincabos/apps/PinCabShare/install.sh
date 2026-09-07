@@ -10,6 +10,7 @@ RUNTIME=/run/pincabshare-v2
 EXPORT=/etc/exports.d/pincabshare-v2.exports
 AVAHI=/etc/avahi/services/pincabshare-v2.service
 DEVICE_STATE=/var/lib/pincabos-link/device.json
+COMMANDER=/opt/pincabos/web/pincabos_webapp_commander.py
 
 fail() {
     printf 'NOGO [PINCABSHARE] %s\n' "$*" >&2
@@ -34,7 +35,8 @@ for candidate in \
     /etc/avahi/services/pincabshare.service \
     /etc/avahi/services/pincabshare-v2.service \
     /etc/exports.d/pincabshare.exports \
-    /etc/exports.d/pincabshare-v2.exports
+    /etc/exports.d/pincabshare-v2.exports \
+    "$COMMANDER"
  do
     if [[ -e "$candidate" ]]; then
         cp -a "$candidate" "$BACKUP/$(basename "$candidate")"
@@ -72,8 +74,38 @@ install -d -o pinball -g pinball -m 0755 "$VIEW"
 install -d -o root -g root -m 0755 "$RUNTIME" "$RUNTIME/mounts"
 install -d -o root -g root -m 0755 /etc/exports.d /etc/avahi/services
 
-chmod 0755 "$ROOT/pincabshare.py" "$ROOT/gate_client.py" "$ROOT/install.sh"
+chmod 0755 \
+    "$ROOT/pincabshare.py" \
+    "$ROOT/gate_client.py" \
+    "$ROOT/install.sh" \
+    "$ROOT/uninstall.sh" \
+    2>/dev/null || true
 python3 -m py_compile "$ROOT/pincabshare.py" "$ROOT/gate_client.py"
+
+# Commander doit afficher la vue dynamique V2. L'ancien « Partage PinCabOS »
+# reste volontairement sur /home/pinball/Share pour les autres outils.
+WEBAPP_PATCHED=0
+if [[ -f "$COMMANDER" ]]; then
+    python3 - "$COMMANDER" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+old = '"PinCabShare": Path("/home/pinball/Share")'
+new = '"PinCabShare": Path("/home/pinball/PinCabShare")'
+
+if new in text:
+    print("GO [WEBAPP] PinCabShare déjà mappé vers la vue V2.")
+elif text.count(old) == 1:
+    path.write_text(text.replace(old, new, 1), encoding="utf-8")
+    print("GO [WEBAPP] PinCabShare -> /home/pinball/PinCabShare")
+else:
+    raise SystemExit("NOGO [WEBAPP] ancre PinCabShare inattendue")
+PY
+    python3 -m py_compile "$COMMANDER" || fail "Commander invalide après patch."
+    WEBAPP_PATCHED=1
+fi
 
 install -o root -g root -m 0644 "$UNIT_SOURCE" "$UNIT_TARGET"
 
@@ -91,6 +123,13 @@ systemctl is-active --quiet nfs-server.service || fail "NFS serveur inactif."
 systemctl enable --now pincabshare-v2.service
 sleep 3
 systemctl is-active --quiet pincabshare-v2.service || fail "PinCabShare V2 inactif."
+
+# Seule la WebApp est rechargée si sa source est présente. Aucun restart du
+# Multiplayer, VPX ou VPinFE.
+if [[ "$WEBAPP_PATCHED" -eq 1 ]] && systemctl list-unit-files pincabos-webapp.service >/dev/null 2>&1; then
+    systemctl restart pincabos-webapp.service
+    systemctl is-active --quiet pincabos-webapp.service || fail "WebApp inactive après reload."
+fi
 
 printf 'GO [SERVICE] pincabshare-v2.service actif.\n'
 printf 'GO [DATA] %s conservé.\n' "$DATA"
