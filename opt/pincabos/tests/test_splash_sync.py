@@ -298,6 +298,69 @@ class Perimetre(unittest.TestCase):
         self.assertEqual(str(ss.PAYSAGE), "/opt/pincabos/media/splash/paysage.png")
 
 
+class MediaEnPaysage(unittest.TestCase):
+    """PINCABOS_SPLASH_MEDIA_PAYSAGE_V2 — Yann, 08/09/2026.
+
+    Un media d'installation ignore la disposition des ecrans du cabinet :
+    screens.json lui est volontairement retire, il est propre a chaque
+    machine. Il n'allume donc qu'un ecran, inconnu. Y poser un portrait
+    tourne de 270 n'a de sens que sur un playfield reellement monte comme
+    tel ; sur un ecran quelconque, seul le paysage se lit.
+
+    Le cabinet installe, lui, ne change pas : il regenere son theme au
+    premier demarrage avec sa vraie disposition.
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.srcs = self.tmp / "splash"
+        self.theme = self.tmp / "theme"
+        self.srcs.mkdir(); self.theme.mkdir()
+        (self.srcs / "portrait0.png").write_bytes(b"PORTRAIT")
+        (self.srcs / "paysage0.png").write_bytes(b"PAYSAGE")
+        (self.theme / ss.IMAGE_HISTORIQUE).write_bytes(b"HISTORIQUE")
+        self.appels = []
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_ok(self, args, timeout=120):
+        self.appels.append(list(args))
+        Path(args[-1]).write_bytes(b"PRODUIT")
+        return 0, ""
+
+    def preparer(self, media):
+        return ss.preparer_images(0, theme_dir=self.theme, run=self.run_ok,
+                                  portrait=self.srcs / "portrait.png",
+                                  paysage=self.srcs / "paysage.png",
+                                  outil="ffmpeg", media=media)
+
+    def test_le_media_prend_le_paysage_et_ne_tourne_rien(self):
+        r = self.preparer(media=True)
+        self.assertEqual(r["genre_playfield"], "paysage")
+        self.assertEqual(r["rot"], 0)
+        tourne = [a for a in self.appels if any("transpose" in x for x in a)]
+        self.assertEqual(tourne, [], "aucune rotation sur un media")
+
+    def test_le_cabinet_installe_ne_change_pas(self):
+        r = self.preparer(media=False)
+        self.assertEqual(r["genre_playfield"], "portrait")
+        self.assertEqual(r["rot"], 270)
+        tourne = [a for a in self.appels if any("transpose" in x for x in a)]
+        self.assertEqual(len(tourne), 1, "le playfield du cabinet reste pre-tourne")
+
+    def test_sans_paysage_le_media_retombe_sur_ce_qu_il_a(self):
+        """Une image manquante ne doit pas rendre le media noir."""
+        (self.srcs / "paysage0.png").unlink()
+        srcs = ss.sources_images(self.theme, self.srcs / "portrait.png",
+                                 self.srcs / "paysage.png", media=True)
+        self.assertEqual(srcs["playfield"]["genre"], "portrait")
+
+    def test_l_iso_appelle_bien_le_mode_media(self):
+        iso = Path(RACINE, "opt/pincabos/script/iso-live.sh").read_text(encoding="utf-8")
+        self.assertIn("pincabos-splash-sync --media", iso)
+
+
 if __name__ == "__main__":
     unittest.main()
 
