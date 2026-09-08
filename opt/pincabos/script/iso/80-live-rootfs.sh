@@ -179,15 +179,31 @@ rm -f "$ROOTFS_DIR/usr/local/sbin/pincabos-gui-fallback" \
       "$ROOTFS_DIR/usr/local/sbin/pincabos-live-installer-console" \
       "$ROOTFS_DIR/etc/systemd/system/pincabos-tui-fallback.service"
 mkdir -p "$ROOTFS_DIR/etc/X11/xorg.conf.d"
-cat > "$ROOTFS_DIR/etc/X11/xorg.conf.d/10-pincabos-kiosk.conf" <<'PCO_XORG'
-Section "Device"
-  Identifier "PinCabOS Kiosk"
-  Driver "modesetting"
-EndSection
-PCO_XORG
-echo "OK: installeur GUI embarque dans le live"
+# PINCABOS_LIVE_XORG_AUTO_V1
+# Le live imposait « Driver "modesetting" » pour le kiosque. Sur une carte
+# NVIDIA propriétaire c'est fatal : modesetting ne sait pas créer de ressources
+# d'écran sur un nœud DRM nvidia, et une section Device explicite ÉCRASE
+# l'OutputClass que le pilote installe (/usr/share/X11/xorg.conf.d/10-nvidia.conf,
+# « MatchDriver nvidia-drm / Driver nvidia »). L'assistant graphique ne démarrait
+# donc jamais sur un cab NVIDIA — constaté sur celui de Yann (RTX 3070 Ti,
+# 08/09/2026) : « (EE) failed to create screen resources », kiosque relancé trois
+# fois puis abandon, alors que le système installé démarre parfaitement.
+# Sans section Device, Xorg choisit seul : l'OutputClass NVIDIA s'applique sur
+# NVIDIA, et modesetting reste le choix automatique partout ailleurs (Intel, AMD,
+# VM). On ne pose donc plus rien ici — la disposition clavier reste, elle.
+rm -f "$ROOTFS_DIR/etc/X11/xorg.conf.d/10-pincabos-kiosk.conf"
+echo "OK: installeur GUI embarque dans le live (Xorg choisit son pilote seul)"
 
-LIVE_KVER="$(ls "$ROOTFS_DIR/lib/modules" | sort -V | tail -1)"
+# PINCABOS_ISO_LIVE_KVER_V1
+# Le live embarque le noyau le plus recent du rootfs. Des qu une reconstruction
+# en installe un second (07/09/2026 : 7.0.0-31 pose par-dessus le 29), l ISO
+# demarre sur un noyau que personne n a essaye en live. Le 31 s est revele bon
+# sur le cab de Yann (RTX 3070 Ti, installe et redemarre) : ce n est donc pas une
+# regression du noyau, mais le choix reste implicite. PCO_LIVE_KVER permet de
+# figer celui du live pour reproduire une construction ou revenir en arriere.
+LIVE_KVER="${PCO_LIVE_KVER:-$(ls "$ROOTFS_DIR/lib/modules" | sort -V | tail -1)}"
+[ -d "$ROOTFS_DIR/lib/modules/$LIVE_KVER" ] || die "noyau demande absent du live : $LIVE_KVER"
+echo "--- PinCabOS: noyau du live = $LIVE_KVER ---"
 DEBIAN_FRONTEND=noninteractive chroot "$ROOTFS_DIR" update-initramfs -c -k "$LIVE_KVER" \
   || DEBIAN_FRONTEND=noninteractive chroot "$ROOTFS_DIR" update-initramfs -u -k "$LIVE_KVER"
 cp "$ROOTFS_DIR/boot/initrd.img-$LIVE_KVER" "$ISO_DIR/casper/initrd"
