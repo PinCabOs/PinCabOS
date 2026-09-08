@@ -68,24 +68,41 @@ class MemeSens(unittest.TestCase):
         self.assertIn("return (270 + rotation_x11) % 360", splash)
 
 
-class NoirParDefaut(unittest.TestCase):
-    """PINCABOS_VOILE_NOIR_V3 — Yann, 07/09/2026 : « mets le en noir pour tout le monde ».
+class VisuelsParDefaut(unittest.TestCase):
+    """PINCABOS_VOILE_VISUELS_V4 — Yann, 08/09/2026, apres une installation complete.
 
-    Reafficher les visuels du splash apres le splash lui-meme ne prolongeait
-    rien : cela rejouait une image deja vue, donc un clignotement.
+    Le voile etait passe au noir la veille (V3) parce que les visuels
+    « clignotaient ». Mais ce clignotement venait du sens de rotation inverse
+    (PINCABOS_VOILE_SENS_V2, corrige depuis) : le voile rejouait l image du
+    splash tete en bas. Les deux chemins alignes, le voile affiche EXACTEMENT
+    ce que Plymouth affichait et le raccord ne se voit plus.
+
+    Le noir, lui, se voyait — mesure sur le cab : 8,5 s d ecran noir entre la
+    fin du splash et le premier rendu du frontend.
     """
 
     def setUp(self):
         self.s = VOILE.read_text(encoding="utf-8")
 
-    def test_les_visuels_sont_une_option(self):
-        self.assertIn('p.add_argument("--visuels", action="store_true"', self.s)
-        self.assertIn("if a.visuels:", self.s)
-        self.assertNotIn("if not a.noir:", self.s)
+    def test_les_visuels_sont_le_defaut(self):
+        self.assertIn("if not a.noir:", self.s)
+        self.assertNotIn("if a.visuels:", self.s)
 
-    def test_noir_reste_accepte_sans_rien_faire(self):
-        """Une unite ou un script du parc peut encore le passer."""
-        self.assertIn('p.add_argument("--noir", action="store_true", help=argparse.SUPPRESS)', self.s)
+    def test_le_noir_reste_possible(self):
+        """Un cabinet peut vouloir le noir : l option doit rester vraie."""
+        self.assertIn('p.add_argument("--noir", action="store_true", help="voile noir, sans visuel")', self.s)
+
+    def test_visuels_reste_accepte_sans_rien_faire(self):
+        """Une unite du parc peut encore le passer : elle ne doit pas planter."""
+        self.assertIn('p.add_argument("--visuels", action="store_true", help=argparse.SUPPRESS)', self.s)
+
+    def test_l_unite_ne_force_aucun_des_deux(self):
+        """Le defaut doit venir du programme, pas d un drapeau cache dans l unite."""
+        unite = Path(RACINE, "etc/systemd/system/pincabos-voile-ecrans.service").read_text(encoding="utf-8")
+        for ligne in unite.splitlines():
+            if ligne.startswith("ExecStart="):
+                self.assertNotIn("--noir", ligne, ligne)
+                self.assertNotIn("--visuels", ligne, ligne)
 
 
 class FonduVersLeFrontend(unittest.TestCase):

@@ -13,11 +13,18 @@ retiree `--delai` secondes apres l apparition d une NOUVELLE fenetre
 « VPinFE Table » (xdotool ; celles d avant un redemarrage ne comptent pas), ou au plus tard a `--max` secondes. Jamais bloquant : sans X, sans
 libX11 ou sans screens.json, on couvre l ecran entier ou on sort.
 
-PINCABOS_VOILE_NOIR_V3 (Yann, 07/09/2026 : « mets le en noir pour tout le monde
-avec un fondu en transparence vers VPinFE ») : le voile est NOIR par defaut.
-Reafficher les visuels du splash apres le splash lui-meme ne prolongeait rien,
-cela rejouait une image deja vue : un clignotement, pas un raccord. Le noir ne
-se voit pas, et c est le but. --visuels rend l ancien comportement.
+PINCABOS_VOILE_VISUELS_V4 (Yann, 08/09/2026, apres une installation complete) :
+le voile REPREND les visuels du splash, et c est le defaut.
+
+Il etait passe au noir la veille (V3) parce que les visuels « clignotaient » —
+mais ce clignotement venait du sens de rotation inverse (PINCABOS_VOILE_SENS_V2,
+corrige depuis) : le voile rejouait l image du splash tete en bas. Une fois les
+deux chemins alignes, le voile affiche EXACTEMENT ce que Plymouth affichait, et
+le raccord ne se voit plus du tout.
+
+Le noir, lui, se voyait : mesure sur le cab de Yann, 8,5 s d ecran noir entre
+la fin du splash et le premier rendu du frontend — « j ai eu un ecran noir
+pendant plusieurs secondes ». --noir rend ce comportement a qui le veut.
 
 Le fondu : sans compositeur (aucun sur un pincab, et en lancer un couterait de
 la latence en jeu), l opacite d une fenetre X n existe pas. On passe donc par la
@@ -296,10 +303,10 @@ def main(argv) -> int:
     p.add_argument("--delai", type=float, default=3.5, help="secondes entre la fenetre du frontend et le retrait")
     p.add_argument("--max", type=float, default=40.0, help="duree maximale du voile")
     p.add_argument("--fenetre", default="VPinFE Table")
-    # PINCABOS_VOILE_NOIR_V3 : noir par defaut. --noir reste accepte (il ne fait
-    # plus rien) pour ne pas casser une unite ou un script qui le passe encore.
-    p.add_argument("--visuels", action="store_true", help="reafficher les visuels du splash")
-    p.add_argument("--noir", action="store_true", help=argparse.SUPPRESS)
+    # PINCABOS_VOILE_VISUELS_V4 : les visuels par defaut. --visuels reste accepte
+    # (il ne fait plus rien) pour ne pas casser une unite qui le passe encore.
+    p.add_argument("--noir", action="store_true", help="voile noir, sans visuel")
+    p.add_argument("--visuels", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--fondu", type=float, default=0.45,
                    help="duree du fondu vers le frontend, en secondes (0 = retrait sec)")
     a = p.parse_args(argv[1:])
@@ -345,7 +352,7 @@ def main(argv) -> int:
     for (role, x, y, w, h) in geos:
         win = lib.XCreateSimpleWindow(dpy, racine, x, y, w, h, 0, noir, noir)
         lib.XChangeWindowAttributes(dpy, win, CW_OVERRIDE_REDIRECT, ctypes.byref(attrs))
-        if a.visuels:
+        if not a.noir:
             visuels.append(habiller(lib, dpy, ecran, win, role, w, h, hasard, gardes) or "noir")
         lib.XMapRaised(dpy, win)
         fenetres.append(win)
