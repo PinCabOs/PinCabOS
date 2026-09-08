@@ -235,6 +235,96 @@ def _ecrire_si_different(path: Path, contenu: str, journal: list, libelle_fichie
     return True
 
 
+# PINCABOS_NOM_MACHINE_V1
+# Le systeme installe EST le rootfs live : il heritait donc de son nom,
+# « pincabos-live ». Tous les cabinets sortis de l ISO portaient le meme, sur
+# le reseau, dans les journaux, dans SSH et dans la WebApp (constate sur le cab
+# de Yann le 08/09/2026 apres une installation complete). L installateur ne le
+# corrigeait jamais : « grep hostname » sur son moteur ne renvoyait rien.
+#
+# Le nom vient de la carte reseau, seul identifiant stable qu une machine ait
+# a l installation : pincabos-<6 derniers caracteres de la MAC>. Deux cabinets
+# sur le meme reseau ne se marchent plus dessus.
+NOMS_A_REMPLACER = {"", "pincabos-live", "localhost", "ubuntu", "ubuntu-server", "(none)"}
+
+
+def mac_de_la_machine(base=Path("/sys/class/net")) -> str:
+    """Les 6 derniers caracteres de la MAC de la premiere carte physique.
+
+    Toujours lue sur la machine COURANTE, jamais sous --root : a l installation
+    le script tourne depuis le live, la cible n a pas encore de /sys. C est le
+    meme materiel, donc la meme carte.
+
+    Les cartes virtuelles (docker, veth, bridges, ZeroTier) n ont pas de dossier
+    « device » : elles sont ecartees, sinon le nom changerait au gre des
+    conteneurs. Les filaires passent avant le sans-fil : une carte Wi-Fi peut
+    etre absente d un cabinet a l autre.
+    """
+    try:
+        cartes = sorted(p for p in base.iterdir() if p.name != "lo")
+    except OSError:
+        return ""
+    def rang(p: Path) -> tuple:
+        return (0 if p.name.startswith(("en", "eth")) else 1, p.name)
+    for carte in sorted(cartes, key=rang):
+        if not (carte / "device").exists():
+            continue
+        try:
+            mac = (carte / "address").read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        hexa = mac.replace(":", "").replace("-", "").lower()
+        if len(hexa) >= 6 and hexa.strip("0"):
+            return hexa[-6:]
+    return ""
+
+
+def nom_machine(mac=None) -> str:
+    """pincabos-a865ed, ou chaine vide si aucune carte physique."""
+    mac = mac_de_la_machine() if mac is None else mac
+    return f"pincabos-{mac}" if mac else ""
+
+
+def hosts_avec_nom(texte: str, nom: str) -> str:
+    """La ligne 127.0.1.1 suit le nom ; le reste du fichier ne bouge pas."""
+    lignes, vu = [], False
+    for l in texte.splitlines():
+        if l.split("#", 1)[0].strip().startswith("127.0.1.1"):
+            if vu:
+                continue
+            lignes.append(f"127.0.1.1\t{nom}")
+            vu = True
+        else:
+            lignes.append(l)
+    if not vu:
+        lignes.append(f"127.0.1.1\t{nom}")
+    return "\n".join(lignes).rstrip("\n") + "\n"
+
+
+def appliquer_nom(root: Path, journal: list) -> bool:
+    """Nomme la machine, sauf si quelqu un lui a deja donne un vrai nom."""
+    fichier = root / "etc/hostname"
+    actuel = ""
+    if fichier.exists():
+        actuel = fichier.read_text(encoding="utf-8", errors="replace").strip()
+    if actuel not in NOMS_A_REMPLACER:
+        journal.append(f"INFO: nom de machine « {actuel} » conservé (choisi ailleurs)")
+        return False
+    nom = nom_machine()
+    if not nom:
+        journal.append("WARN: aucune carte réseau physique trouvée, nom de machine inchangé")
+        return False
+    change = _ecrire_si_different(fichier, nom + "\n", journal, "/etc/hostname")
+    hosts = root / "etc/hosts"
+    if hosts.exists():
+        change |= _ecrire_si_different(
+            hosts, hosts_avec_nom(hosts.read_text(encoding="utf-8", errors="replace"), nom),
+            journal, "/etc/hosts (127.0.1.1)")
+    if change:
+        journal.append(f"GO: la machine s appelle « {nom} »")
+    return change
+
+
 def appliquer(root: Path = Path("/"), grub: bool = True, efi: bool = False, executer=_run) -> dict:
     journal, change = [], False
     version = version_info(root)
@@ -275,6 +365,8 @@ def appliquer(root: Path = Path("/"), grub: bool = True, efi: bool = False, exec
                 journal.append("INFO: update-grub laissé à l'installateur (racine différente de /)")
     else:
         journal.append("INFO: /etc/default/grub absent, menu GRUB non touché")
+
+    change |= appliquer_nom(root, journal)
 
     if efi and root == Path("/"):
         journal.extend(appliquer_efi(executer))
