@@ -75,7 +75,13 @@ def _membres_racine(noms: list) -> set:
 
 def extraire(archive: Path, dest: Path) -> Path:
     """Extrait dans `dest` (vidé d'abord). Un dossier racine unique est aplati."""
-    if dest.exists():
+    # PINCABOS_RUNTIME_ROTATION_V1 : avant la rotation, opt/pinball/vpx était un
+    # LIEN vers un dossier versionné. Sur un master construit avant, rmtree refuse
+    # (« Cannot call rmtree on a symbolic link ») et toute la recette s'arrête.
+    # On retire le lien — jamais sa cible, que le dégraissage écarte ensuite.
+    if dest.is_symlink():
+        dest.unlink()
+    elif dest.exists():
         shutil.rmtree(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.mkdir()

@@ -191,5 +191,60 @@ class RecetteIdempotente(unittest.TestCase):
         self.assertEqual(subprocess.run(["bash", "-n", str(R / "opt/pincabos/script/build-master.sh")]).returncode, 0)
 
 
+class AncienLienVpx(unittest.TestCase):
+    """PINCABOS_RUNTIME_ROTATION_V1 — reconstruire par-dessus un master d'avant.
+
+    Avant la rotation, opt/pinball/vpx etait un LIEN vers un dossier versionne.
+    shutil.rmtree refuse un lien (« Cannot call rmtree on a symbolic link ») :
+    la recette s'arretait sur « NOGO: vpx » et l'ISO ne se fabriquait plus
+    (constate le 08/09/2026 en reconstruisant sur le master de la veille).
+    """
+
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def archive(self) -> Path:
+        """Une archive tar minimale, racine unique a aplatir."""
+        a = self.tmp / "bundle.tar.gz"
+        contenu = self.tmp / "src" / "VPinballX_BGFX-1-linux-x64"
+        contenu.mkdir(parents=True)
+        (contenu / "VPinballX_BGFX").write_text("bin", encoding="utf-8")
+        with tarfile.open(a, "w:gz") as t:
+            t.add(contenu, arcname="VPinballX_BGFX-1-linux-x64")
+        return a
+
+    def test_le_lien_est_remplace_par_un_dossier(self):
+        cible = self.tmp / "VPinballX_BGFX-1-linux-x64-ancien"
+        cible.mkdir()
+        (cible / "temoin").write_text("ancien", encoding="utf-8")
+        dest = self.tmp / "vpx"
+        dest.symlink_to(cible.name)
+        self.assertTrue(dest.is_symlink())
+
+        fc.extraire(self.archive(), dest)
+
+        self.assertFalse(dest.is_symlink(), "le lien doit avoir cede la place")
+        self.assertTrue(dest.is_dir())
+        self.assertTrue((dest / "VPinballX_BGFX").is_file())
+        self.assertTrue((cible / "temoin").is_file(),
+                        "la cible du lien ne doit PAS avoir ete effacee au passage")
+
+    def test_un_vrai_dossier_est_toujours_vide_avant(self):
+        dest = self.tmp / "vpx"
+        dest.mkdir()
+        (dest / "vieux") .write_text("x", encoding="utf-8")
+        fc.extraire(self.archive(), dest)
+        self.assertFalse((dest / "vieux").exists(), "le dossier doit etre vide d'abord")
+        self.assertTrue((dest / "VPinballX_BGFX").is_file())
+
+    def test_le_degraissage_ecarte_les_bundles_versionnes(self):
+        slim = Path(RACINE, "opt/pincabos/script/slim-master.sh").read_text(encoding="utf-8")
+        self.assertIn('for d in "$M"/opt/pinball/VPinballX_BGFX-*/', slim)
+        self.assertIn("PINCABOS_RUNTIME_ROTATION_V1", slim)
+
+
 if __name__ == "__main__":
     unittest.main()
