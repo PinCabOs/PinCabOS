@@ -150,8 +150,16 @@ def parametres_media() -> tuple[dict[str, tuple[int, int]], int]:
     """PINCABOS_SPLASH_MEDIA_V1 : media d installation, aucun screens.json.
 
     Le playfield n a pas de resolution connue (0x0 : le theme prend la plus
-    grande dalle) et la dalle est supposee a l endroit (rotation 0) : le
-    portrait est tourne comme sur un cab standard, le paysage va ailleurs.
+    grande dalle) et la dalle est supposee a l endroit (rotation 0).
+
+    PINCABOS_SPLASH_MEDIA_PAYSAGE_V2 (Yann, 08/09/2026) : le visuel est le
+    PAYSAGE, pas le portrait tourne. Un media d installation ignore la
+    disposition des ecrans du cabinet — screens.json lui est volontairement
+    retire, il est propre a chaque machine — et n en allume donc qu un seul,
+    inconnu. Y poser un portrait tourne de 270 n a de sens que sur un
+    playfield reellement monte comme tel ; sur un ecran quelconque, seul le
+    paysage se lit. Le cabinet installe regenere son theme au premier
+    demarrage, avec sa vraie disposition.
     """
     return {"playfield": (0, 0)}, 0
 
@@ -265,12 +273,20 @@ def galerie(dossier: Path, prefixe: str) -> list:
                   key=_cle_naturelle)
 
 
-def sources_images(theme_dir: Path = THEME_DIR, portrait: Path = PORTRAIT, paysage: Path = PAYSAGE) -> dict:
-    """Les galeries du playfield et des autres ecrans (listes de fichiers), et leur genre."""
+def sources_images(theme_dir: Path = THEME_DIR, portrait: Path = PORTRAIT, paysage: Path = PAYSAGE,
+                   media: bool = False) -> dict:
+    """Les galeries du playfield et des autres ecrans (listes de fichiers), et leur genre.
+
+    `media` : media d installation, aucune disposition d ecrans connue. Le
+    playfield recoit alors le paysage comme tout le monde
+    (PINCABOS_SPLASH_MEDIA_PAYSAGE_V2).
+    """
     historique = theme_dir / IMAGE_HISTORIQUE
     portraits = galerie(portrait.parent, portrait.stem) if portrait.parent.is_dir() else []
     paysages = galerie(paysage.parent, paysage.stem) if paysage.parent.is_dir() else []
-    if portraits:
+    if media and paysages:
+        pf = {"sources": paysages, "genre": "paysage"}
+    elif portraits:
         pf = {"sources": portraits, "genre": "portrait"}
     else:
         pf = {"sources": [historique], "genre": "historique"}
@@ -318,13 +334,14 @@ def purger(theme_dir: Path, prefixe: str, garder: int):
 
 
 def preparer_images(rot_x11: int, theme_dir: Path = THEME_DIR, run=executer,
-                    portrait: Path = PORTRAIT, paysage: Path = PAYSAGE, outil: str | None = None) -> dict:
+                    portrait: Path = PORTRAIT, paysage: Path = PAYSAGE, outil: str | None = None,
+                    media: bool = False) -> dict:
     """Ecrit les galeries du theme ; renvoie ce que le script doit savoir.
 
     L illustration historique (paysage, un seul visuel pour tout) garde son
     ancien comportement : tournee comme X11 tourne la dalle, jamais plus.
     """
-    srcs = sources_images(theme_dir, portrait, paysage)
+    srcs = sources_images(theme_dir, portrait, paysage, media=media)
     pf, autres = srcs["playfield"], srcs["autres"]
     degres = rotation_effective(rot_x11) if pf["genre"] == "portrait" else rot_x11
 
@@ -778,7 +795,7 @@ def main() -> int:
         print("  configuration d ecrans et visuels inchanges : rien a faire")
         return 0
 
-    images = preparer_images(rot)
+    images = preparer_images(rot, media=args.media)
     THEME.write_text(theme(ecrans, rot, images), encoding="utf-8")
     resume = ", ".join(f"{r} {w}x{h}" for r, (w, h) in ecrans.items())
     print(f"  theme ecrit : {resume}")
