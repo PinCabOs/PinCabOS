@@ -1,0 +1,442 @@
+#!/usr/bin/env python3
+"""PinCabOS Remote Support V1.
+
+Outbound-only HTTPS relay. The service never listens on a network socket. When
+an administrator opens a session on PinCabOS.cc, this agent starts a real SSH
+client to pinball@127.0.0.1 and bridges its PTY over authenticated HTTPS.
+"""
+
+from __future__ import annotations
+
+import base64
+import errno
+import fcntl
+import json
+import os
+from pathlib import Path
+import pty
+import pwd
+import signal
+import ssl
+import stat
+import subprocess
+import sys
+import time
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+
+STATE_DIR = Path("/var/lib/pincabos-link")
+DEVICE_FILE = STATE_DIR / "device.json"
+REMOTE_DIR = Path("/var/lib/pincabos-remote-support")
+REMOTE_STATE = REMOTE_DIR / "state.json"
+SSH_KEY = REMOTE_DIR / "id_ed25519"
+
+EXPECTED_API = "https://pincabos.cc"
+EXPECTED_TOKEN_TYPE = "PinCabOS-Device"
+POLL_PATH = "/api/account/cabinets/remote-support/device-poll"
+CLIENT_VERSION = "1"
+MAX_RESPONSE_BYTES = 65536
+MAX_OUTPUT_BYTES = 16384
+
+
+class RemoteSession:
+    def __init__(self):
+        self.session_id = None
+        self.process = None
+        self.master_fd = None
+        self.ack_input_id = 0
+        self.error = None
+
+    @property
+    def active(self):
+        return bool(
+            self.session_id
+            and self.process
+            and self.process.poll() is None
+            and self.master_fd is not None
+        )
+
+    def close(self):
+        process = self.process
+        master_fd = self.master_fd
+        self.process = None
+        self.master_fd = None
+        self.session_id = None
+        self.ack_input_id = 0
+
+        if process and process.poll() is None:
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except OSError:
+                pass
+            try:
+                process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+        if master_fd is not None:
+            try:
+                os.close(master_fd)
+            except OSError:
+                pass
+
+
+def die(message):
+    print("NOGO [REMOTE SUPPORT] " + str(message), file=sys.stderr)
+    raise SystemExit(1)
+
+
+def _validate_device_file():
+    if os.geteuid() != 0:
+        die("service must run as root")
+    if not DEVICE_FILE.exists():
+        die("cabinet is not paired to PinCabOS.cc")
+
+    directory_stat = STATE_DIR.stat()
+    file_stat = DEVICE_FILE.stat()
+    if (
+        directory_stat.st_uid != 0
+        or directory_stat.st_gid != 0
+        or stat.S_IMODE(directory_stat.st_mode) != 0o700
+        or file_stat.st_uid != 0
+        or file_stat.st_gid != 0
+        or stat.S_IMODE(file_stat.st_mode) != 0o600
+    ):
+        die("paired-device state permissions are invalid")
+
+
+def load_device():
+    _validate_device_file()
+    try:
+        data = json.loads(DEVICE_FILE.read_text(encoding="utf-8"))
+    except Exception as exc:
+        die("cannot read paired-device state: " + str(exc))
+
+    api_base = data.get("api_base")
+    token_type = data.get("token_type")
+    token = data.get("device_token")
+    if api_base != EXPECTED_API:
+        die("unexpected API base")
+    if token_type != EXPECTED_TOKEN_TYPE:
+        die("unexpected token type")
+    if not isinstance(token, str) or not 32 <= len(token) <= 256:
+        die("device token missing or invalid")
+
+    return {
+        "api_base": api_base,
+        "token_type": token_type,
+        "token": token,
+    }
+
+
+def write_state(connected, session_id=None, error=None):
+    REMOTE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(REMOTE_DIR, 0o700)
+    payload = {
+        "connected": bool(connected),
+        "last_ok_epoch": int(time.time()) if connected else None,
+        "active_session_id": session_id,
+        "error": str(error)[:300] if error else None,
+        "version": CLIENT_VERSION,
+    }
+    temporary = REMOTE_STATE.with_suffix(".tmp")
+    temporary.write_text(
+        json.dumps(payload, separators=(",", ":")) + "\n",
+        encoding="utf-8",
+    )
+    os.chmod(temporary, 0o600)
+    temporary.replace(REMOTE_STATE)
+
+
+def ensure_local_ssh_key():
+    REMOTE_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(REMOTE_DIR, 0o700)
+
+    try:
+        pinball = pwd.getpwnam("pinball")
+    except KeyError:
+        die("local account pinball not found")
+
+    if not SSH_KEY.exists():
+        result = subprocess.run(
+            [
+                "/usr/bin/ssh-keygen",
+                "-q",
+                "-t", "ed25519",
+                "-N", "",
+                "-C", "pincabos-remote-support",
+                "-f", str(SSH_KEY),
+            ],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if result.returncode != 0:
+            die("ssh-keygen failed: " + result.stderr.strip())
+
+    os.chown(SSH_KEY, 0, 0)
+    os.chmod(SSH_KEY, 0o600)
+    public_key_path = Path(str(SSH_KEY) + ".pub")
+    os.chown(public_key_path, 0, 0)
+    os.chmod(public_key_path, 0o644)
+
+    public_key = public_key_path.read_text(encoding="ascii").strip()
+    ssh_dir = Path(pinball.pw_dir) / ".ssh"
+    authorized = ssh_dir / "authorized_keys"
+    ssh_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chown(ssh_dir, pinball.pw_uid, pinball.pw_gid)
+    os.chmod(ssh_dir, 0o700)
+
+    marker = "pincabos-remote-support"
+    options = (
+        'from="127.0.0.1,::1",no-agent-forwarding,'
+        'no-port-forwarding,no-X11-forwarding '
+    )
+    desired = options + public_key
+
+    lines = []
+    if authorized.exists():
+        lines = authorized.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines()
+    lines = [line for line in lines if marker not in line]
+    lines.append(desired)
+    authorized.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.chown(authorized, pinball.pw_uid, pinball.pw_gid)
+    os.chmod(authorized, 0o600)
+
+
+def start_ssh(remote, session_id):
+    if remote.active:
+        remote.close()
+
+    ensure_local_ssh_key()
+    master_fd, slave_fd = pty.openpty()
+    flags = fcntl.fcntl(master_fd, fcntl.F_GETFL)
+    fcntl.fcntl(master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+
+    environment = os.environ.copy()
+    environment["TERM"] = "dumb"
+    environment["LANG"] = environment.get("LANG", "C.UTF-8")
+
+    command = [
+        "/usr/bin/ssh",
+        "-tt",
+        "-o", "BatchMode=yes",
+        "-o", "IdentitiesOnly=yes",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "UserKnownHostsFile=/dev/null",
+        "-o", "LogLevel=ERROR",
+        "-o", "ConnectTimeout=5",
+        "-i", str(SSH_KEY),
+        "pinball@127.0.0.1",
+    ]
+
+    try:
+        process = subprocess.Popen(
+            command,
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+            env=environment,
+            start_new_session=True,
+        )
+    finally:
+        os.close(slave_fd)
+
+    remote.session_id = str(session_id)
+    remote.process = process
+    remote.master_fd = master_fd
+    remote.ack_input_id = 0
+    remote.error = None
+
+
+def read_output(remote):
+    if remote.master_fd is None:
+        return b""
+    chunks = []
+    remaining = MAX_OUTPUT_BYTES
+    while remaining > 0:
+        try:
+            chunk = os.read(remote.master_fd, min(4096, remaining))
+        except OSError as exc:
+            if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK, errno.EIO):
+                break
+            raise
+        if not chunk:
+            break
+        chunks.append(chunk)
+        remaining -= len(chunk)
+    return b"".join(chunks)
+
+
+def write_input(remote, raw):
+    if not remote.active or remote.master_fd is None:
+        return
+    view = memoryview(raw)
+    while view:
+        try:
+            written = os.write(remote.master_fd, view)
+        except OSError as exc:
+            if exc.errno in (errno.EAGAIN, errno.EWOULDBLOCK):
+                time.sleep(0.01)
+                continue
+            raise
+        view = view[written:]
+
+
+def post_poll(device, payload):
+    body = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+    request = Request(
+        device["api_base"] + POLL_PATH,
+        data=body,
+        method="POST",
+        headers={
+            "Accept": "application/json",
+            "Authorization": device["token_type"] + " " + device["token"],
+            "Content-Type": "application/json",
+            "User-Agent": "PinCabOS-RemoteSupport/" + CLIENT_VERSION,
+        },
+    )
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_2
+
+    try:
+        with urlopen(request, timeout=20, context=context) as response:
+            raw = response.read(MAX_RESPONSE_BYTES + 1)
+            status_code = response.status
+            content_type = str(response.headers.get_content_type())
+    except HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read(2048).decode("utf-8", errors="replace")
+        except Exception:
+            pass
+        raise RuntimeError(
+            "HTTP " + str(exc.code) + " " + detail[:200]
+        ) from exc
+    except (URLError, TimeoutError, ssl.SSLError, OSError) as exc:
+        raise RuntimeError("HTTPS relay unavailable: " + str(exc)) from exc
+
+    if status_code != 200 or content_type != "application/json":
+        raise RuntimeError("unexpected relay response")
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise RuntimeError("relay response too large")
+    result = json.loads(raw.decode("utf-8"))
+    if not isinstance(result, dict) or result.get("ok") is not True:
+        raise RuntimeError("invalid relay response")
+    return result
+
+
+def main():
+    device = load_device()
+    ensure_local_ssh_key()
+    remote = RemoteSession()
+    backoff = 1.0
+
+    try:
+        while True:
+            output = b""
+            session_status = None
+            error = None
+
+            if remote.active:
+                output = read_output(remote)
+                session_status = "active"
+            elif remote.session_id:
+                if remote.process and remote.process.poll() is not None:
+                    try:
+                        output = read_output(remote)
+                    except OSError:
+                        output = b""
+                    session_status = "error" if remote.process.returncode else "closed"
+                    error = (
+                        "local_ssh_exit_" + str(remote.process.returncode)
+                        if remote.process.returncode else None
+                    )
+
+            payload = {
+                "schema_version": 1,
+                "client_version": CLIENT_VERSION,
+                "active_session_id": remote.session_id,
+                "session_status": session_status,
+                "ack_input_id": remote.ack_input_id,
+                "output_b64": (
+                    base64.b64encode(output).decode("ascii")
+                    if output else None
+                ),
+                "error": error,
+            }
+
+            try:
+                response = post_poll(device, payload)
+                write_state(True, remote.session_id)
+                backoff = 1.0
+            except Exception as exc:
+                write_state(False, remote.session_id, exc)
+                time.sleep(backoff)
+                backoff = min(30.0, backoff * 2.0)
+                continue
+
+            command = str(response.get("command") or "idle")
+            session_id = response.get("session_id")
+
+            if command == "start":
+                try:
+                    start_ssh(remote, session_id)
+                except Exception as exc:
+                    remote.session_id = str(session_id)
+                    remote.error = str(exc)
+                    write_state(True, remote.session_id, exc)
+            elif command == "continue":
+                if remote.session_id != str(session_id):
+                    remote.close()
+                else:
+                    for message in response.get("input") or []:
+                        try:
+                            message_id = int(message.get("id"))
+                            raw = base64.b64decode(
+                                str(message.get("data_b64") or ""),
+                                validate=True,
+                            )
+                        except Exception:
+                            continue
+                        if not raw:
+                            continue
+                        try:
+                            write_input(remote, raw)
+                            remote.ack_input_id = max(
+                                remote.ack_input_id,
+                                message_id,
+                            )
+                        except OSError:
+                            break
+            elif command == "close":
+                remote.close()
+                write_state(True, None)
+            elif command == "idle" and remote.session_id:
+                remote.close()
+
+            if session_status in ("closed", "error"):
+                remote.close()
+
+            try:
+                delay = int(response.get("poll_after_ms") or 1000) / 1000.0
+            except (TypeError, ValueError):
+                delay = 1.0
+            time.sleep(max(0.1, min(delay, 5.0)))
+    finally:
+        remote.close()
+        write_state(False, None, "service_stopped")
+
+
+if __name__ == "__main__":
+    main()

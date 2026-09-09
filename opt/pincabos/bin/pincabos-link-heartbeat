@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import json
 import os
+import socket
 import ssl
 import stat
+import subprocess
 import sys
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -11,6 +13,9 @@ from urllib.request import Request, urlopen
 
 STATE_DIR = Path("/var/lib/pincabos-link")
 STATE_FILE = STATE_DIR / "device.json"
+REMOTE_SUPPORT_STATE = Path(
+    "/var/lib/pincabos-remote-support/state.json"
+)
 
 EXPECTED_API = "https://pincabos.cc"
 EXPECTED_TOKEN_TYPE = "PinCabOS-Device"
@@ -98,7 +103,86 @@ def load_state():
     }
 
 
-def safe_http_error(error):
+def _systemd_active(*units):
+    for unit in units:
+        try:
+            result = subprocess.run(
+                ["systemctl", "is-active", "--quiet", unit],
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=2,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            continue
+
+        if result.returncode == 0:
+            return True
+
+    return False
+
+
+def _local_ssh_ok():
+    try:
+        with socket.create_connection(
+            ("127.0.0.1", 22),
+            timeout=0.75,
+        ):
+            return True
+    except OSError:
+        return False
+
+
+def _uptime_seconds():
+    try:
+        text = Path("/proc/uptime").read_text(
+            encoding="ascii"
+        ).split()[0]
+        return max(0, int(float(text)))
+    except (OSError, ValueError, IndexError):
+        return 0
+
+
+def _load_1m():
+    try:
+        return max(0.0, round(float(os.getloadavg()[0]), 3))
+    except (AttributeError, OSError, ValueError):
+        return 0.0
+
+
+def _relay_connected():
+    try:
+        data = json.loads(
+            REMOTE_SUPPORT_STATE.read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError, TypeError):
+        return False
+
+    return bool(
+        isinstance(data, dict)
+        and data.get("connected") is True
+    )
+
+
+def runtime_audit():
+    return {
+        "uptime_seconds": _uptime_seconds(),
+        "load_1m": _load_1m(),
+        "webapp_ok": _systemd_active(
+            "pincabos-webapp.service",
+            "pincabos-web.service",
+        ),
+        "sshd_active": _systemd_active(
+            "ssh.service",
+            "sshd.service",
+        ),
+        "ssh_local_ok": _local_ssh_ok(),
+        "relay_connected": _relay_connected(),
+    }
+
+
+def _http_error(error):
     name = "erreur_non_detaillee"
 
     try:
@@ -113,14 +197,12 @@ def safe_http_error(error):
     except Exception:
         pass
 
-    return f"HTTP {error.code} ({name})"
+    return name
 
 
-def heartbeat():
-    state = load_state()
-
+def _post_heartbeat(state, payload, user_agent):
     body = json.dumps(
-        {"schema_version": 1},
+        payload,
         separators=(",", ":"),
     ).encode("utf-8")
 
@@ -133,7 +215,7 @@ def heartbeat():
             "Authorization":
                 state["token_type"] + " " + state["token"],
             "Content-Type": "application/json",
-            "User-Agent": "PinCabOS-Link-Heartbeat/1",
+            "User-Agent": user_agent,
         },
     )
 
@@ -152,7 +234,8 @@ def heartbeat():
             )
             raw = response.read(MAX_RESPONSE_BYTES + 1)
     except HTTPError as exc:
-        die("Heartbeat refusé : " + safe_http_error(exc))
+        error_name = _http_error(exc)
+        return None, exc.code, error_name
     except (
         URLError,
         TimeoutError,
@@ -162,7 +245,7 @@ def heartbeat():
         die("Connexion TLS impossible : " + str(exc))
 
     if http != 200:
-        die(f"Réponse heartbeat inattendue : HTTP {http}.")
+        return None, http, "unexpected_http_status"
 
     if content_type != "application/json":
         die("Réponse heartbeat non JSON.")
@@ -175,7 +258,11 @@ def heartbeat():
     except Exception:
         die("Réponse heartbeat JSON invalide.")
 
-    valid = (
+    return result, 200, None
+
+
+def _valid_response(result, state):
+    return bool(
         isinstance(result, dict)
         and result.get("ok") is True
         and result.get("online") is True
@@ -185,13 +272,66 @@ def heartbeat():
         and isinstance(result.get("received_at"), str)
     )
 
-    if not valid:
+
+def heartbeat():
+    state = load_state()
+    runtime = runtime_audit()
+
+    result, http, error_name = _post_heartbeat(
+        state,
+        {
+            "schema_version": 2,
+            "runtime": runtime,
+        },
+        "PinCabOS-Link-Heartbeat/2",
+    )
+
+    fallback_errors = {
+        "unsupported_schema_version",
+        "unsupported_fields",
+    }
+    used_schema = 2
+
+    if http == 400 and error_name in fallback_errors:
+        result, http, error_name = _post_heartbeat(
+            state,
+            {"schema_version": 1},
+            "PinCabOS-Link-Heartbeat/2-fallback-v1",
+        )
+        used_schema = 1
+
+    if http != 200:
+        die(
+            "Heartbeat refusé : HTTP "
+            + str(http)
+            + " ("
+            + str(error_name or "erreur_non_detaillee")
+            + ")"
+        )
+
+    if not _valid_response(result, state):
         die("Réponse heartbeat incomplète ou incohérente.")
+
+    accepted_schema = result.get("schema_version")
+
+    if accepted_schema is not None:
+        try:
+            accepted_schema = int(accepted_schema)
+        except (TypeError, ValueError):
+            die("Version de schéma heartbeat invalide.")
+
+        if accepted_schema not in (1, 2):
+            die("Version de schéma heartbeat inattendue.")
 
     print("GO [OK] Heartbeat transmis.")
     print("Cabinet    : " + str(result.get("cabinet")))
     print("UUID       : " + str(result.get("uuid")))
     print("Reçu le    : " + str(result.get("received_at")))
+    print("Schéma     : V" + str(used_schema))
+    print("WebApp     : " + ("GO" if runtime["webapp_ok"] else "NOGO"))
+    print("SSHD       : " + ("GO" if runtime["sshd_active"] else "NOGO"))
+    print("SSH local  : " + ("GO" if runtime["ssh_local_ok"] else "NOGO"))
+    print("Relay 443  : " + ("GO" if runtime["relay_connected"] else "NOGO"))
     print("Intervalle : 60 secondes")
     print("Hors ligne : après 180 secondes")
     print("Jeton      : utilisé mais jamais affiché")
