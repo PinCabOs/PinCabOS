@@ -90,12 +90,66 @@ def detect():
     return found
 
 
-def _teensy_port():
+# VID des puces serie que porte une Wemos D1 / ESP (cf. VID_MAP).
+ESP_VIDS = ("1a86", "10c4", "303a")
+
+
+def _teensy_port(exclus=()):
     for dev in sorted(glob.glob("/dev/ttyACM*")):
+        if dev in exclus:
+            continue
         p = _udev(dev)
         if "teensy" in (p.get("ID_SERIAL", "") + p.get("ID_MODEL", "")).lower():
             return dev
     return None
+
+
+def _esp_port(exclus=()):
+    """Port d une Wemos D1 / ESP. Elles sortent sur /dev/ttyUSB* via CH340 ou
+    CP210x ; un ESP32 natif (303a) peut sortir sur /dev/ttyACM*."""
+    for dev in sorted(glob.glob("/dev/ttyUSB*") + glob.glob("/dev/ttyACM*")):
+        if dev in exclus:
+            continue
+        if (_udev(dev).get("ID_VENDOR_ID") or "").lower() in ESP_VIDS:
+            return dev
+    return None
+
+
+def _resoudre_ports(strips):
+    """Un port serie par controleur, jamais le meme deux fois.
+
+    PINCABOS_DOF_PORT_PAR_FAMILLE_V1 — remonte le 09/09/2026 par Patrick : sa
+    Wemos n allumait aucune LED. La resolution de « auto » etait la meme pour
+    les deux familles :
+
+        _tty_by_serial(serial) or _teensy_port() or "/dev/ttyACM0"
+
+    Sans numero de serie enregistre — et l inventaire n en attribuait qu aux
+    Teensy — une Wemos tombait donc sur _teensy_port(), c est-a-dire le port de
+    la TEENSY. Les deux controleurs se retrouvaient sur le meme /dev/ttyACM1 :
+    la Wemos ne recevait rien, et la Teensy recevait le trafic des deux.
+    """
+    pris, resolus = [], []
+    for s in strips:
+        wemos = s.get("controller") == "WemosD1MPStripController"
+        port = s.get("com_port", "auto")
+        if port == "auto":
+            port = _tty_by_serial(s.get("serial")) or ""
+        if not port:
+            port = (_esp_port(pris) if wemos else _teensy_port(pris)) or ""
+        if not port:
+            # aucun materiel de cette famille branche : on ecrit un port par
+            # defaut de la BONNE famille, pas celui de l autre.
+            port = "/dev/ttyUSB0" if wemos else "/dev/ttyACM0"
+        if port in pris:
+            sys.stderr.write(
+                "ATTENTION: %s et un autre controleur visent %s. "
+                "Renseignez le numero de serie de chaque carte "
+                "(page DOF > Materiel) pour les distinguer.\n"
+                % (s.get("name", s.get("controller", "?")), port))
+        pris.append(port)
+        resolus.append(dict(s, com_port=port))
+    return resolus
 
 
 def _tty_by_serial(serial):
@@ -119,9 +173,14 @@ def _strip_controller(s, tag):
     de TeensyStripController dans libdof : memes tags serie (ComPortName...),
     PAS de HostName. Strips 1..10 (9-10 emis seulement si non nuls, pour
     rester octet-identique aux cabinet.xml existants a 8 entrees)."""
+    # _resoudre_ports() a normalement deja fige le port ; ce repli sert aux
+    # appels directs et reste fidele a la FAMILLE du controleur.
     port = s.get("com_port", "auto")
     if port == "auto":
-        port = _tty_by_serial(s.get("serial")) or _teensy_port() or "/dev/ttyACM0"
+        wemos = tag == "WemosD1MPStripController"
+        port = (_tty_by_serial(s.get("serial"))
+                or (_esp_port() if wemos else _teensy_port())
+                or ("/dev/ttyUSB0" if wemos else "/dev/ttyACM0"))
     leds = (s.get("leds_per_strip", []) + [0] * 10)[:10]
     lines = ["    <%s>" % tag,
              _el("Name", s.get("name", "%s 1" % tag))]
@@ -205,7 +264,7 @@ def _ledwiz_equivalent(s):
 
 
 def gen(config):
-    strips = config.get("strips", [])
+    strips = _resoudre_ports(config.get("strips", []))
     controllers, toys = [], []
     for s in strips:
         ctype = s.get("controller", "TeensyStripController")
