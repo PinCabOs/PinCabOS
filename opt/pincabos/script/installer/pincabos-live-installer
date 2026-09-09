@@ -1222,6 +1222,26 @@ PY
     fi
 }
 
+apply_target_inputs() {
+    # PINCABOS_INSTALLEUR_BOUTONS_V1 : le mappage capture pendant l installation
+    # est POSE ici et rejoue au premier demarrage — jamais ecrit depuis le
+    # chroot. Les peripheriques et les chemins n y sont pas ceux du cabinet
+    # installe : c est la lecon du ZeDMD (PINCABOS_ZEDMD_AU_PREMIER_DEMARRAGE_V1).
+    local src="${PCO_ANS_INPUTS_FILE:-}"
+    [ -n "$src" ] || return 0
+    echo
+    pco_step "Applying the buttons captured in the installer to the target"
+    if [ ! -s "$src" ]; then
+        pco_warn "inputs file missing or empty: $src (Map Commander on the cab will do it)"
+        return 0
+    fi
+    install -d -o 1000 -g 1000 -m 0775 "$TARGET/opt/pincabos/config"
+    install -o 1000 -g 1000 -m 0664 "$src" "$TARGET/opt/pincabos/config/inputs-installer.json"
+    install -d -m 0755 "$TARGET/opt/pincabos/flags"
+    date -Is > "$TARGET/opt/pincabos/flags/inputs-installer.pending"
+    pco_go "inputs-installer.json installed ($(python3 -c 'import json,sys;print(len(json.load(open(sys.argv[1])).get("mappings",{})))' "$src" 2>/dev/null || echo '?') action(s))"
+}
+
 apply_target_ownership() {
   # PINCABOS_CIBLE_DROITS_V1
   # La WebApp tourne en User=pinball. Les fichiers de /opt/pincabos/config
@@ -1986,6 +2006,7 @@ install_payload() {
   apply_target_audio
   apply_target_dof
   apply_target_toys
+  apply_target_inputs
   apply_target_ownership
   purge_live_only_from_target
   refresh_target_initrd_for_orientation

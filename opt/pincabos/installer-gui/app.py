@@ -19,6 +19,7 @@ from flask import Flask, Response, jsonify, render_template, request
 import screens as pco_screens  # PINCABOS_INSTALLEUR_ECRANS_V1
 import dmd as pco_dmd  # PINCABOS_INSTALLEUR_DMD_V1
 import disks as pco_disks  # PINCABOS_INSTALLEUR_DISQUE_V1
+import inputs as pco_inputs  # PINCABOS_INSTALLEUR_BOUTONS_V1
 
 # PINCABOS_INSTALLEUR_RESEAU_V1 : le moteur réseau du cab (nmcli) sert aussi à
 # l'assistant. Absent de la session (ISO au modèle classique) : l'étape se
@@ -406,6 +407,52 @@ def toys_vers_fichiers(a):
     return {"toys_file": str(f)}
 
 
+# PINCABOS_INSTALLEUR_BOUTONS_V1 : le cabinet est branche pendant l installation,
+# c est le bon moment pour appuyer sur ses boutons. On capture ici ; l ecriture
+# dans le VPinballX.ini et le vpinfe.ini de la cible est rejouee au premier
+# demarrage, ou les peripheriques sont ceux du cabinet installe.
+BOUTONS_DEMO = {"actions": [{"id": "LeftFlipper", "label": "Flipper gauche", "defaut": "Key;225", "essentielle": True},
+                            {"id": "RightFlipper", "label": "Flipper droit", "defaut": "Key;229", "essentielle": True},
+                            {"id": "Start", "label": "Start", "defaut": "Key;30", "essentielle": True}],
+                "peripheriques": [{"name": "L'atelier d'Arnoz DudesCab", "id": "0001", "boutons": 15, "axes": 6}]}
+
+
+@app.route("/api/inputs")
+def inputs_status():
+    if DEMO:
+        return jsonify(dict(BOUTONS_DEMO, disponible=True))
+    try:
+        return jsonify({"disponible": pco_inputs.disponible(),
+                        "actions": pco_inputs.actions(),
+                        "peripheriques": pco_inputs.peripheriques()})
+    except Exception as exc:
+        return jsonify({"disponible": False, "error": str(exc), "actions": [], "peripheriques": []})
+
+
+@app.route("/api/inputs/capture", methods=["POST"])
+def inputs_capture():
+    a = request.get_json(force=True, silent=True) or {}
+    if DEMO:
+        return jsonify({"binding": "Key;225", "label": "LSHIFT", "device": "clavier (démo)",
+                        "device_id": "Key", "raw": "démo"})
+    return jsonify(pco_inputs.capturer(a.get("delai", 8.0)))
+
+
+def boutons_vers_fichiers(a):
+    """Le mappage capture devient gui-inputs.json, rejoue au premier demarrage."""
+    if not isinstance(a.get("inputs"), dict):
+        return {}
+    erreurs, ok = pco_inputs.valider(a["inputs"])
+    if erreurs:
+        return {"error": "bad-inputs", "detail": erreurs}
+    if not ok.get("mappings"):
+        return {}          # rien de capture : l etape a ete passee, c est permis
+    RUN_DIR.mkdir(parents=True, exist_ok=True)
+    f = RUN_DIR / "gui-inputs.json"
+    f.write_text(json.dumps(pco_inputs.config_json(ok), indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return {"inputs_file": str(f)}
+
+
 RESEAU_DEMO = {
     "interfaces": [
         {"device": "eno1", "type": "ethernet", "state": "100 (connected)", "method": "auto", "address": "172.18.40.80/24",
@@ -682,6 +729,13 @@ def install():
     # PINCABOS_INSTALLEUR_TOYS_V1 : contrôleurs de rubans déclarés
     if isinstance(a.get("toys"), dict):
         res = toys_vers_fichiers(a)
+        if "error" in res:
+            return jsonify(res), 400
+        reponses.update(res)
+
+    # PINCABOS_INSTALLEUR_BOUTONS_V1 : les boutons appuyés pendant l'installation
+    if isinstance(a.get("inputs"), dict):
+        res = boutons_vers_fichiers(a)
         if "error" in res:
             return jsonify(res), 400
         reponses.update(res)
