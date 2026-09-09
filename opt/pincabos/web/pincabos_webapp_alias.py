@@ -6,11 +6,17 @@ leurs chemins et leurs noms de fonction. `page()` (gabarit commun) est fourni pa
 """
 from __future__ import annotations
 
+import logging
 
 from flask import Blueprint, jsonify, redirect, request
 
 
 alias_bp = Blueprint("alias", __name__)
+
+# L application n est pas un global des modules (PINCABOS_WEBAPP_MODULES_V1) :
+# un module journalise pour son propre compte. `current_app` ne conviendrait pas
+# ici — register() tourne hors contexte d application.
+_journal = logging.getLogger("pincabos-webapp")
 
 page = None  # gabarit HTML commun, posé par register()
 
@@ -159,7 +165,4 @@ def register(app, page_fn):
         from pincabos_system_audit_ui import register as _register_system_audit
         _register_system_audit(app, page_fn)
     except Exception as exc:
-        try:
-            app.logger.exception("PinCabOS System Audit registration failed: %s", exc)
-        except Exception:
-            pass
+        _journal.exception("PinCabOS System Audit registration failed: %s", exc)
