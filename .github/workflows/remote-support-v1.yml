@@ -1,0 +1,82 @@
+name: RemoteSupport V1
+
+on:
+  pull_request:
+    paths:
+      - 'opt/pincabos/bin/pincabos-link-heartbeat'
+      - 'opt/pincabos/bin/pincabos-remote-support-agent'
+      - 'etc/systemd/system/pincabos-remote-support.service'
+      - 'etc/systemd/system/multi-user.target.wants/pincabos-remote-support.service'
+      - 'etc/systemd/system/pincabos-webapp.service.wants/pincabos-remote-support.service'
+      - '.github/workflows/remote-support-v1.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: RemoteSupport validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Python syntax
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          for path in (
+              Path('opt/pincabos/bin/pincabos-link-heartbeat'),
+              Path('opt/pincabos/bin/pincabos-remote-support-agent'),
+          ):
+              compile(path.read_text(encoding='utf-8'), str(path), 'exec')
+              print('GO [OK]', path)
+          PY
+
+      - name: Systemd activation links
+        run: |
+          set -Eeuo pipefail
+          test -f etc/systemd/system/pincabos-remote-support.service
+          test -L etc/systemd/system/multi-user.target.wants/pincabos-remote-support.service
+          test -L etc/systemd/system/pincabos-webapp.service.wants/pincabos-remote-support.service
+          test "$(readlink etc/systemd/system/multi-user.target.wants/pincabos-remote-support.service)" = '../pincabos-remote-support.service'
+          test "$(readlink etc/systemd/system/pincabos-webapp.service.wants/pincabos-remote-support.service)" = '../pincabos-remote-support.service'
+          grep -Fq 'ConditionPathExists=/var/lib/pincabos-link/device.json' etc/systemd/system/pincabos-remote-support.service
+
+      - name: Update V4 scope
+        run: |
+          set -Eeuo pipefail
+          python3 - <<'PY'
+          import importlib.util
+          from pathlib import Path
+          path = Path('opt/pincabos/update/pincabos_updates.py')
+          spec = importlib.util.spec_from_file_location('updates', path)
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          paths = [
+              'opt/pincabos/bin/pincabos-link-heartbeat',
+              'opt/pincabos/bin/pincabos-remote-support-agent',
+              'etc/systemd/system/pincabos-remote-support.service',
+              'etc/systemd/system/multi-user.target.wants/pincabos-remote-support.service',
+              'etc/systemd/system/pincabos-webapp.service.wants/pincabos-remote-support.service',
+          ]
+          failed = []
+          for rel in paths:
+              allowed = bool(mod.allowed(rel))
+              build = bool(mod.allowed_for_build(rel))
+              print(('GO [OK]' if allowed and build else 'NOGO [!!]'), rel, 'allowed=', allowed, 'build=', build)
+              if not (allowed and build):
+                  failed.append(rel)
+          if failed:
+              raise SystemExit('RemoteSupport paths outside Updates V4 scope')
+          PY
+
+      - name: Network safety contract
+        run: |
+          set -Eeuo pipefail
+          grep -Fq 'EXPECTED_API = "https://pincabos.cc"' opt/pincabos/bin/pincabos-remote-support-agent
+          grep -Fq 'pinball@127.0.0.1' opt/pincabos/bin/pincabos-remote-support-agent
+          grep -Fq 'no-port-forwarding' opt/pincabos/bin/pincabos-remote-support-agent
+          ! grep -Eq '(^|[^0-9])0\.0\.0\.0([^0-9]|$)|listen\(' opt/pincabos/bin/pincabos-remote-support-agent
