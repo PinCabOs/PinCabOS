@@ -1,0 +1,21 @@
+# PINCABOS_UNITE_DECLAREE_SANS_LIEN_V1
+# Unites qui declarent WantedBy= sans lien dactivation, relevees le 10/09/2026.
+# Une unite ici n est PAS demarree par la cible qu elle nomme. Certaines le sont
+# autrement (udev, .path, appel direct par l installateur) ; d autres ne le sont
+# par personne. C est le defaut exact de pincabos-screen-hotplug, qui laissait le
+# playfield a l envers.
+# Cette liste ne doit que RETRECIR.
+#
+# 11 unites.
+#
+pincabos-dashboard-live-capture.service multi-user.target
+pincabos-dudescab-hotplug-recovery.service multi-user.target
+pincabos-finalize-firstboot.service multi-user.target
+pincabos-firstboot-initramfs-refresh.service multi-user.target
+pincabos-firstboot-network-webapp-fix.service multi-user.target
+pincabos-firstboot-vpinfe-packaged-runtime-fix.service graphical.target
+pincabos-safe-batch-full.service multi-user.target
+pincabos-scoreview-x11-hq-preview.service graphical.target
+pincabos-splash-sync.service multi-user.target
+pincabos-table-test.service graphical.target
+pincabos-webapp-fallback.service multi-user.target
