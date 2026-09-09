@@ -161,8 +161,19 @@ def _seed_from_cabinet():
         return 30, 9
 
     detected = _detect()
-    teensy_serials = [d["serial"] for d in detected
-                      if d.get("auto_config") is False and "Teensy" in d.get("kind", "")]
+    # PINCABOS_DOF_PORT_PAR_FAMILLE_V1 : une file de numeros de serie PAR
+    # famille. Avant, seules les Teensy en recevaient un ; une Wemos restait
+    # sans serie, donc sans port propre, et heritait de celui de la Teensy.
+    def _series(motifs):
+        return [d["serial"] for d in detected
+                if d.get("auto_config") is False and d.get("serial")
+                and any(m in d.get("kind", "") for m in motifs)]
+
+    series_par_type = {
+        "TeensyStripController": _series(("Teensy",)),
+        "WemosD1MPStripController": _series(("Wemos", "ESP")),
+    }
+    pris_par_type = {k: 0 for k in series_par_type}
 
     oc = root.find("OutputControllers")
     idx = 0
@@ -171,7 +182,11 @@ def _seed_from_cabinet():
             if c.tag not in DECLARED_TYPES:
                 continue
             name = (c.findtext("Name") or c.tag).strip()
-            serial = teensy_serials[idx] if (c.tag == "TeensyStripController" and idx < len(teensy_serials)) else ""
+            file_ = series_par_type.get(c.tag, [])
+            rang = pris_par_type.get(c.tag, 0)
+            serial = file_[rang] if rang < len(file_) else ""
+            if c.tag in pris_par_type:
+                pris_par_type[c.tag] += 1
             dev = _new_device(c.tag, name, serial)
             dev["source"] = "detected" if serial else "manual"
             if c.tag in ("TeensyStripController", "WemosD1MPStripController"):
