@@ -9,3 +9,15 @@ StartLimitBurst=3
 [Service]
 Type=oneshot
 ExecStart=/usr/local/libexec/pincabos/pincabos-screen-hotplug
+
+[Install]
+# PINCABOS_ROTATION_AU_BOOT_V1 : cette unite est la SEULE a appliquer
+# playfield_rotation (xrandr --rotate, depuis screens.json). Elle n etait
+# demarree que par la regle udev « ACTION==change, SUBSYSTEM==drm » : sur un
+# demarrage normal, ecrans deja branches, les connecteurs sont enumeres en
+# « add » et l evenement « change » ne vient jamais. La rotation choisie dans
+# l installateur n etait donc jamais appliquee au reboot (remonte par Flo le
+# 09/09/2026 : playfield tete en bas, corrige a la main depuis la WebApp).
+# L ordre est deja prevu pour le boot (After=pincabos-screen-topology-boot,
+# PINCABOS_TOPOLOGIE_VERROU_BOOT_V1) : il ne manquait que le declenchement.
+WantedBy=graphical.target

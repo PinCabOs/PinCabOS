@@ -83,17 +83,31 @@ fi
 # Un symlink de compatibilité conserve l ancien chemin pour tous les lecteurs.
 VPX_PREF_DIR="$PCO_VPX_PREF"
 VPX_LEGACY_PREF="$PCO_VPX_LEGACY_PREF"
+# PINCABOS_VPX_PREFPATH_V2 : la migration ne doit JAMAIS empecher de jouer.
+# Remonte par Patrick le 09/09/2026, sur une installation neuve :
+#   mv: cannot move '/home/pinball/.local/share/VPinballX/10.8'
+#       to '/home/pinball/.pincabos/vpx': Permission denied
+# Le dossier appartenait a root ; renommer demande le droit d ecriture sur le
+# PARENT. Le mv echouait, `set -e` tuait le lanceur, VPX ne demarrait pas — et
+# rien ne le disait : VPinFE se contentait de reafficher le menu.
+# Les droits sont corriges a l installation (PINCABOS_CIBLE_DROITS_V2), mais le
+# lanceur doit rester jouable meme quand la migration est impossible : on garde
+# alors l ancien dossier, en le disant.
 if [[ ! -e "${VPX_PREF_DIR}" ]]; then
-  mkdir -p "$(dirname "${VPX_PREF_DIR}")"
+  mkdir -p "$(dirname "${VPX_PREF_DIR}")" 2>/dev/null || true
   if [[ -d "${VPX_LEGACY_PREF}" && ! -L "${VPX_LEGACY_PREF}" ]]; then
-    mv "${VPX_LEGACY_PREF}" "${VPX_PREF_DIR}"
-  else
-    mkdir -p "${VPX_PREF_DIR}"
+    if ! mv "${VPX_LEGACY_PREF}" "${VPX_PREF_DIR}" 2>/dev/null; then
+      echo "PINCABOS [PREFS] Migration impossible (droits ?) : on continue avec ${VPX_LEGACY_PREF}." >&2
+      VPX_PREF_DIR="${VPX_LEGACY_PREF}"
+    fi
+  elif ! mkdir -p "${VPX_PREF_DIR}" 2>/dev/null; then
+    echo "PINCABOS [PREFS] ${VPX_PREF_DIR} increable : on continue avec ${VPX_LEGACY_PREF}." >&2
+    VPX_PREF_DIR="${VPX_LEGACY_PREF}"
   fi
 fi
 if [[ ! -e "${VPX_LEGACY_PREF}" ]]; then
-  mkdir -p "$(dirname "${VPX_LEGACY_PREF}")"
-  ln -sn "${VPX_PREF_DIR}" "${VPX_LEGACY_PREF}"
+  mkdir -p "$(dirname "${VPX_LEGACY_PREF}")" 2>/dev/null || true
+  ln -sn "${VPX_PREF_DIR}" "${VPX_LEGACY_PREF}" 2>/dev/null || true
 fi
 chown -h "$PINBALL_USER:$PINBALL_USER" "${VPX_LEGACY_PREF}" 2>/dev/null || true
 chown "$PINBALL_USER:$PINBALL_USER" "$(dirname "${VPX_PREF_DIR}")" "${VPX_PREF_DIR}" 2>/dev/null || true

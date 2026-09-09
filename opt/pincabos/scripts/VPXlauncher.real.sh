@@ -32,12 +32,23 @@ run_with_front_windows() {
         "$PLACER" --place >/dev/null 2>&1 &
     fi
     local rc=0
+    local DEBUT=$SECONDS
     set +e
     "$REAL" "$@"
     rc=$?
     set -e
     if [[ -x "$PLACER" ]]; then
         "$PLACER" --restore >/dev/null 2>&1 || true
+    fi
+    # PINCABOS_LANCEUR_SORTIE_PARLANTE_V1 : seul le code 139 (SIGSEGV) etait
+    # traite ; tout autre echec repartait en silence. Le 09/09/2026, VPX rendait
+    # la main en moins d une seconde chez Patrick et le journal du lanceur ne
+    # montrait que « Lancement Original direct » puis « frontend reactive » a la
+    # meme seconde — aucune trace de la cause. Un retour immediat et non nul est
+    # anormal : on le dit, avec le code.
+    if [[ "$rc" -ne 0 ]] && (( SECONDS - DEBUT < 5 )); then
+        echo "PINCABOS [LANCEUR] VPX a rendu la main en $(( SECONDS - DEBUT ))s avec le code $rc." >&2
+        echo "PINCABOS [LANCEUR] Table : ${TABLE:-inconnue}" >&2
     fi
     # PINCABOS_VULKAN_SEGFAULT_FALLBACK_V1 : 139 = tue par le signal 11
     if [[ "$rc" -eq 139 && -n "${TABLE:-}" && "${PINCABOS_BACKEND_RETRY:-0}" != "1" && -x "$BACKEND_FALLBACK" ]]; then
