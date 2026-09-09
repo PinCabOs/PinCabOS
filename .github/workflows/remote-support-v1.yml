@@ -38,12 +38,16 @@ jobs:
       - name: Systemd activation links
         run: |
           set -Eeuo pipefail
-          test -f etc/systemd/system/pincabos-remote-support.service
+          unit='etc/systemd/system/pincabos-remote-support.service'
+          test -f "$unit"
           test -L etc/systemd/system/multi-user.target.wants/pincabos-remote-support.service
           test -L etc/systemd/system/pincabos-webapp.service.wants/pincabos-remote-support.service
           test "$(readlink etc/systemd/system/multi-user.target.wants/pincabos-remote-support.service)" = '../pincabos-remote-support.service'
           test "$(readlink etc/systemd/system/pincabos-webapp.service.wants/pincabos-remote-support.service)" = '../pincabos-remote-support.service'
-          grep -Fq 'ConditionPathExists=/var/lib/pincabos-link/device.json' etc/systemd/system/pincabos-remote-support.service
+          grep -Fq 'ConditionPathExists=/var/lib/pincabos-link/device.json' "$unit"
+          grep -Fq 'StateDirectory=pincabos-remote-support' "$unit"
+          grep -Fq 'StateDirectoryMode=0700' "$unit"
+          ! grep -Fq 'ReadWritePaths=/var/lib/pincabos-remote-support' "$unit"
 
       - name: Update V4 scope
         run: |
@@ -66,7 +70,7 @@ jobs:
           for rel in paths:
               allowed = bool(mod.allowed(rel))
               build = bool(mod.allowed_for_build(rel))
-              print(('GO [OK]' if allowed and build else 'NOGO [!!]'), rel, 'allowed=', allowed, 'build=', build)
+              print(('GO [OK]' if allowed and build else 'NOGO [FAIL]'), rel, 'allowed=', allowed, 'build=', build)
               if not (allowed and build):
                   failed.append(rel)
           if failed:
