@@ -21,20 +21,48 @@ DET = [
 ]
 
 
+def decrit():
+    """Ce qu un utilisateur SAISIT : une matrice sur la Teensy, des rubans sur la
+    Wemos. La proposition, elle, n avance plus rien
+    (PINCABOS_TOYS_SANS_SUPPOSITION_V1)."""
+    p = pd.proposer_toys(DET)
+    p["controllers"][0].update({"enabled": True, "mode": "matrice", "width": 144,
+                                "height": 16, "strips": pd.repartir(144 * 16)})
+    p["controllers"][1].update({"enabled": True, "mode": "rubans", "strips": [144]})
+    return p
+
+
 class Declaration(unittest.TestCase):
     def test_tri_des_cartes(self):
         self.assertEqual([c["type"] for c in pd.controleurs_de_rubans(DET)], ["TeensyStripController", "WemosD1MPStripController"])
         self.assertEqual([c["kind"] for c in pd.cartes_auto(DET)], ["DudesCab"])
 
     def test_repartition_et_proposition(self):
-        self.assertEqual(pd.repartir(144 * 16), [512, 512, 512, 512, 256])     # le backboard de Yann
+        # la decoupe en sorties pleines sert toujours, quand l utilisateur
+        # decrit VRAIMENT sa matrice : une sortie de Teensy s arrete a 512 LED
+        self.assertEqual(pd.repartir(144 * 16), [512, 512, 512, 512, 256])
         self.assertEqual(pd.repartir(0), [])
+        # PINCABOS_TOYS_SANS_SUPPOSITION_V1 : la proposition ne decrit plus le
+        # cabinet a la place de l utilisateur. Avant, le premier controleur
+        # arrivait en « matrice 144x16 » avec les sorties qui vont avec : les
+        # deux valeurs etant coherentes entre elles, la validation passait et on
+        # emportait la description du cabinet de quelqu un d autre (backboard de
+        # Patrick a 512 LED allumees sur 1368, 09/09/2026).
         p = pd.proposer_toys(DET)["controllers"]
-        self.assertEqual((p[0]["mode"], p[0]["width"], p[0]["height"], p[0]["ledwiz_number"]), ("matrice", 144, 16, 30))
-        self.assertEqual((p[1]["mode"], p[1]["strips"], p[1]["ledwiz_number"]), ("rubans", [144], 31))
+        self.assertEqual(len(p), 2, "les cartes detectees restent listees")
+        for c in p:
+            self.assertFalse(c["enabled"], "un controleur inconnu arrive eteint")
+            self.assertEqual((c["width"], c["height"], c["strips"]), (0, 0, []))
+        self.assertEqual((p[0]["ledwiz_number"], p[1]["ledwiz_number"]), (30, 31))
+
+    def test_un_controleur_eteint_ne_bloque_pas(self):
+        # le navigateur sautait deja les controleurs eteints (toysProblems) ;
+        # le validateur du serveur, lui, refusait width=0. L ecart ne se voyait
+        # pas tant que la proposition arrivait allumee ET valide.
+        self.assertEqual(pd.valider_toys(pd.proposer_toys(DET), DET)[0], [])
 
     def test_validation(self):
-        p = pd.proposer_toys(DET)
+        p = decrit()
         self.assertEqual(pd.valider_toys(p, DET)[0], [])
         mauvais = json.loads(json.dumps(p)); mauvais["controllers"][0]["strips"] = [512, 512]
         self.assertTrue(any("2304" in e for e in pd.valider_toys(mauvais, DET)[0]))
@@ -47,7 +75,7 @@ class Declaration(unittest.TestCase):
         self.assertTrue(pd.valider_toys("rien", DET)[0])
 
     def test_inventaire(self):
-        _, ok = pd.valider_toys(pd.proposer_toys(DET), DET)
+        _, ok = pd.valider_toys(decrit(), DET)
         inv = pd.inventaire_json(ok, DET)
         d0, d1 = inv["devices"]
         self.assertEqual((d0["type"], d0["serial"], d0["leds_per_strip"][:5], d0["toy"]["name"], d0["ledwiz_outputs"]),
@@ -89,7 +117,7 @@ class CabinetXml(unittest.TestCase):
         tmp = Path(tempfile.mkdtemp())
         try:
             mod = pd.outil(R / "opt/pincabos/tools/dof-cabinet/dof-cabinet.py")
-            _, ok = pd.valider_toys(pd.proposer_toys(DET), DET)
+            _, ok = pd.valider_toys(decrit(), DET)
             inv = pd.inventaire_json(ok, DET)
             for dev in inv["devices"]:
                 dev["com_port"] = "/dev/ttyACM9"
@@ -181,7 +209,12 @@ class Assistant(unittest.TestCase):
         self.assertIn("PCO_ANS_TOYS_FILE=" + str(self.tmp / "gui-toys.json"), (self.tmp / "gui-answers.env").read_text(encoding="utf-8"))
         inv = json.loads((self.tmp / "gui-toys.json").read_text(encoding="utf-8"))
         self.assertEqual(len(inv["devices"]), 2); self.assertEqual(inv["source"], "PinCabOS installer")
-        mauvais = d["proposition"]; mauvais["controllers"][0]["strips"] = [1]
+        # un controleur ETEINT n est plus valide (il n a rien a decrire) : pour
+        # verifier que le serveur refuse bien une saisie incoherente, il faut
+        # l allumer — c est le cas reel, celui de l utilisateur qui se trompe.
+        mauvais = d["proposition"]
+        mauvais["controllers"][0].update({"enabled": True, "mode": "matrice",
+                                          "width": 144, "height": 16, "strips": [1]})
         r = self.client.post("/api/install", json={"lang": "fr", "mode": "1", "disk": "/dev/nvme0n1", "confirm": "INSTALL PINCABOS",
                                                    "network": False, "toys": mauvais})
         self.assertEqual(r.status_code, 400); self.assertEqual(r.get_json()["error"], "bad-toys")

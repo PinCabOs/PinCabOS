@@ -187,17 +187,26 @@ def repartir(total: int, par_sortie: int = 512) -> list:
 
 
 def proposer_toys(detectes: list) -> dict:
-    """Premier contrôleur = backboard (matrice 144×16, le cas courant), les suivants = rubans."""
+    """Liste les contrôleurs détectés, sans rien préremplir.
+
+    PINCABOS_TOYS_SANS_SUPPOSITION_V1 — remonté par Patrick le 09/09/2026 : sa
+    backboard n'allumait que 512 LED sur 1368. L'assistant proposait d'office
+    « premier contrôleur = matrice 144×16 » et répartissait ces 2304 LED en
+    sorties pleines (512, 512, 512, 512, 256). Les deux valeurs étant cohérentes
+    ENTRE ELLES, le contrôle « le total doit faire largeur × hauteur » passait :
+    on validait, sans le voir, la description du cabinet de quelqu'un d'autre.
+
+    Un contrôleur dont on ne sait rien arrive donc ÉTEINT, sans dimensions.
+    Celui qui a une backboard l'allume et décrit son matériel ; celui qui ne
+    sait pas encore laisse éteint et le fera depuis la page DOF du cabinet.
+    Dans les deux cas, aucune configuration inventée ne part sur le disque.
+    """
     ctrls = []
     for i, c in enumerate(controleurs_de_rubans(detectes)):
-        base = {"serial": c["serial"], "type": c["type"], "enabled": True, "ledwiz_number": 30 + i,
-                "brightness": 25, "color_order": "GRB"}
-        if i == 0:
-            base.update({"mode": "matrice", "width": 144, "height": 16, "arrangement": "TopDownAlternateLeftRight",
-                         "strips": repartir(144 * 16)})
-        else:
-            base.update({"mode": "rubans", "width": 0, "height": 0, "arrangement": "LeftRightTopDown", "strips": [144]})
-        ctrls.append(base)
+        ctrls.append({"serial": c["serial"], "type": c["type"], "enabled": False,
+                      "ledwiz_number": 30 + i, "brightness": 25, "color_order": "GRB",
+                      "mode": "matrice", "width": 0, "height": 0,
+                      "arrangement": "TopDownAlternateLeftRight", "strips": []})
     return {"controllers": ctrls}
 
 
@@ -246,9 +255,16 @@ def valider_toys(choix, detectes: list) -> tuple[list, dict]:
         if prop["arrangement"] not in ARRANGEMENTS:
             erreurs.append(f"contrôleur {i + 1} : arrangement inconnu")
         if mode == "matrice":
-            prop["width"], b1 = _entier(c.get("width", 144), 144, 1, 1024)
-            prop["height"], b2 = _entier(c.get("height", 16), 16, 1, 1024)
-            if not (b1 and b2):
+            # PINCABOS_TOYS_SANS_SUPPOSITION_V1 : zero est desormais une reponse
+            # valide — c est celle d un controleur qu on laisse eteint parce
+            # qu on ne connait pas encore son cablage. La contrainte 1..1024 ne
+            # vaut que s il est allume. Avant, le navigateur sautait bien les
+            # controleurs eteints (toysProblems) mais pas le validateur du
+            # serveur : l ecart ne se voyait pas tant que la proposition
+            # arrivait allumee ET valide.
+            prop["width"], b1 = _entier(c.get("width", 0), 0, 0, 1024)
+            prop["height"], b2 = _entier(c.get("height", 0), 0, 0, 1024)
+            if prop["enabled"] and not (b1 and b2 and prop["width"] and prop["height"]):
                 erreurs.append(f"contrôleur {i + 1} : dimensions de matrice hors de 1..1024")
             elif prop["enabled"] and sum(strips_ok) != prop["width"] * prop["height"]:
                 erreurs.append(f"contrôleur {i + 1} : {sum(strips_ok)} LEDs sur les sorties pour une matrice de {prop['width']}×{prop['height']} = {prop['width'] * prop['height']}")
