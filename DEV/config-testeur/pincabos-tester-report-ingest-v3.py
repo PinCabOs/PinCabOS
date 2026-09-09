@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reconstruct a PinCabOS tester report from a GitHub issue and its chunk comments."""
+"""Reconstruct a PinCabOS tester report from a GitHub transport issue."""
 
 from __future__ import annotations
 
@@ -13,12 +13,11 @@ import re
 import sys
 import unicodedata
 import urllib.error
-import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
-REPO = "KarotsSugarpie/PinCabOS"
+REPO = "PinCabOs/PinCabOS"
 EXPECTED_AUTHOR = "KarotsSugarpie"
 ISSUE_MARKER = "PINCABOS_TESTER_REPORT_V3"
 CHUNK_MARKER = "PINCABOS_TESTER_REPORT_CHUNK_V3"
@@ -29,7 +28,7 @@ MAX_COMPRESSED_BYTES = 600 * 1024
 MAX_CHUNKS = 32
 
 
-def fail(message: str) -> "NoReturn":
+def fail(message: str):
     raise SystemExit("NOGO: " + message)
 
 
@@ -74,8 +73,7 @@ def parse_issue_metadata(body: str) -> dict:
 
 def fetch_all_comments(issue_number: int, token: str) -> list[dict]:
     comments: list[dict] = []
-    page = 1
-    while page <= 10:
+    for page in range(1, 11):
         url = (
             f"https://api.github.com/repos/{REPO}/issues/{issue_number}/comments"
             f"?per_page=100&page={page}"
@@ -86,7 +84,6 @@ def fetch_all_comments(issue_number: int, token: str) -> list[dict]:
         comments.extend(batch)
         if len(batch) < 100:
             return comments
-        page += 1
     fail("trop de commentaires")
 
 
@@ -157,21 +154,26 @@ def decompress_report(encoded: str, expected_sha256: str) -> str:
 def main() -> int:
     if len(sys.argv) != 2 or not sys.argv[1].isdigit():
         fail("usage: ingest ISSUE_NUMBER")
+
     issue_number = int(sys.argv[1])
     token = str(os.environ.get("GITHUB_TOKEN") or "").strip()
     if not token:
         fail("GITHUB_TOKEN absent")
-    if str(os.environ.get("GITHUB_REPOSITORY") or REPO) != REPO:
-        fail("depot inattendu")
+
+    runtime_repo = str(os.environ.get("GITHUB_REPOSITORY") or REPO)
+    if runtime_repo != REPO:
+        fail(f"depot inattendu: {runtime_repo}")
 
     issue = api_get(f"https://api.github.com/repos/{REPO}/issues/{issue_number}", token)
     if not isinstance(issue, dict):
         fail("issue introuvable")
     if issue.get("pull_request"):
         fail("pull request refusee")
+
     author = str(((issue.get("user") or {}).get("login") or ""))
     if author != EXPECTED_AUTHOR:
         fail("auteur issue refuse")
+
     title = str(issue.get("title") or "")
     if not title.startswith("[PINCABOS-TESTER-REPORT-V3]"):
         fail("titre issue invalide")
@@ -201,6 +203,7 @@ def main() -> int:
         created_dt = datetime.fromisoformat(created.replace("Z", "+00:00")).astimezone(timezone.utc)
     except ValueError:
         created_dt = datetime.now(timezone.utc)
+
     stamp = created_dt.strftime("%Y%m%d-%H%M%S")
     filename = (
         f"{slugify(tester, 'testeur')}-{slugify(hostname, 'pincabos')}-"
@@ -218,6 +221,7 @@ def main() -> int:
         with open(output_path, "a", encoding="utf-8") as handle:
             handle.write(f"report_path={destination.as_posix()}\n")
             handle.write(f"report_sha256={expected_sha}\n")
+
     print(destination.as_posix())
     return 0
 
