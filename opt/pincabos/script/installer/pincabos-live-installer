@@ -1097,9 +1097,13 @@ apply_target_dmd() {
     install -o 1000 -g 1000 -m 0664 "$src" "$TARGET/opt/pincabos/config/zedmd.json"
     install -d -m 0755 "$TARGET/opt/pincabos/flags"
     date -Is > "$TARGET/opt/pincabos/flags/dmd-installer.pending"
-    if [ -x "$TARGET/opt/pincabos/tools/pincabos-zedmd" ]; then
-        chroot "$TARGET" runuser -u pinball -- /opt/pincabos/tools/pincabos-zedmd apply 2>&1 | sed 's/^/    /' || true
-    fi
+    # PINCABOS_ZEDMD_AU_PREMIER_DEMARRAGE_V1 : on n applique plus rien depuis le
+    # chroot. Un ZeDMD en Wi-Fi n y est pas joignable — pas de reseau final, pas
+    # de peripherique — et le « || true » avalait l echec en silence (remonte par
+    # Flo le 09/09/2026 : IP renseignee a l installation, ZeDMD inactif ensuite).
+    # Le drapeau ci-dessus suffit : pincabos-dmd-installer.service rejoue
+    # l application au premier demarrage et CONSERVE le drapeau tant qu elle
+    # echoue, donc il retente aux demarrages suivants.
     pco_go "zedmd.json installed (mode: $(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("mode","off"))' "$src" 2>/dev/null || echo '?'))"
 }
 
@@ -1240,6 +1244,11 @@ apply_target_ownership() {
     /opt/pincabos/config /opt/pincabos/logs /opt/pincabos/backups \
     /opt/pincabos/state /opt/pincabos/download /opt/pincabos/tmp \
     /opt/pincabos/uploads /opt/pincabos/cache /opt/pinball 2>/dev/null || true
+  # PINCABOS_CIBLE_DROITS_V2 : le compte du joueur aussi. Remonte par Patrick le
+  # 09/09/2026 : ~/.local/share/VPinballX appartenait a root, le lanceur VPX
+  # echouait a migrer le dossier de preferences (« mv : Permission denied ») et
+  # mourait sur son set -e. Aucune table ne demarrait, sans un mot d erreur.
+  chroot "$TARGET" chown -R pinball:pinball /home/pinball 2>/dev/null || true
   pco_go "Droits du compte joueur appliques"
 }
 

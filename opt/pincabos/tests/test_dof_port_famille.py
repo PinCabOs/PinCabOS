@@ -19,6 +19,7 @@ sur /dev/ttyACM* que balaie `_teensy_port()` : les deux familles ne peuvent pas
 partager la meme recherche.
 """
 import importlib.util
+import types
 import unittest
 from pathlib import Path
 
@@ -45,12 +46,23 @@ FAUX_BUS = {
 }
 
 
+def _poser_bus(m, bus):
+    """Fait croire au module qu il voit ce bus USB.
+
+    On remplace l ATTRIBUT `glob` du module par un objet a nous. Surtout pas
+    `m.glob.glob = ...` : `m.glob` est le module glob lui-meme, partage par tout
+    le processus — le remplacer casse silencieusement tous les tests suivants qui
+    listent des fichiers (deux echecs a retardement, 09/09/2026).
+    """
+    m._udev = lambda dev: bus.get(dev, {})
+    m.glob = types.SimpleNamespace(
+        glob=lambda motif: sorted(d for d in bus if d.startswith(motif.rstrip("*"))))
+
+
 class PortsDistincts(unittest.TestCase):
     def setUp(self):
         self.m = _module()
-        self.m._udev = lambda dev: FAUX_BUS.get(dev, {})
-        self.m.glob.glob = lambda motif: sorted(
-            d for d in FAUX_BUS if d.startswith(motif.rstrip("*")))
+        _poser_bus(self.m, FAUX_BUS)
 
     def test_la_wemos_ne_prend_pas_le_port_de_la_teensy(self):
         strips = [{"controller": "TeensyStripController", "name": "Teensy 1"},
@@ -68,7 +80,7 @@ class PortsDistincts(unittest.TestCase):
         self.assertEqual(ports, ["/dev/ttyUSB0", "/dev/ttyACM1"])
 
     def test_sans_materiel_le_repli_reste_dans_la_bonne_famille(self):
-        self.m.glob.glob = lambda motif: []
+        _poser_bus(self.m, {})
         strips = [{"controller": "WemosD1MPStripController", "name": "Wemos 1"},
                   {"controller": "TeensyStripController", "name": "Teensy 2"}]
         ports = [r["com_port"] for r in self.m._resoudre_ports(strips)]
@@ -84,9 +96,7 @@ class PortsDistincts(unittest.TestCase):
         bus = dict(FAUX_BUS)
         bus["/dev/ttyUSB1"] = {"ID_VENDOR_ID": "10c4", "ID_SERIAL": "cp210x",
                                "ID_MODEL": "CP2102", "ID_SERIAL_SHORT": ""}
-        self.m._udev = lambda dev: bus.get(dev, {})
-        self.m.glob.glob = lambda motif: sorted(
-            d for d in bus if d.startswith(motif.rstrip("*")))
+        _poser_bus(self.m, bus)
         strips = [{"controller": "WemosD1MPStripController", "name": "W1"},
                   {"controller": "WemosD1MPStripController", "name": "W2"}]
         ports = [r["com_port"] for r in self.m._resoudre_ports(strips)]

@@ -167,7 +167,14 @@ class Integration(unittest.TestCase):
         self.assertIn("  apply_target_network\n  apply_target_dmd\n", s)
         self.assertIn('"$TARGET/opt/pincabos/config/zedmd.json"', s)
         self.assertIn("dmd-installer.pending", s)
-        self.assertIn("runuser -u pinball -- /opt/pincabos/tools/pincabos-zedmd apply", s)
+        # PINCABOS_ZEDMD_AU_PREMIER_DEMARRAGE_V1 : l installateur n applique plus
+        # rien depuis le chroot. Un ZeDMD en Wi-Fi n y est pas joignable — pas de
+        # reseau final, pas de peripherique — et le « || true » avalait l echec
+        # (remonte par Flo le 09/09/2026 : IP renseignee, ZeDMD inactif ensuite).
+        # Le drapeau suffit : pincabos-dmd-installer.service rejoue au premier
+        # demarrage et CONSERVE le drapeau tant que l application echoue.
+        self.assertNotIn("pincabos-zedmd apply", s,
+                         "plus d application ZeDMD depuis le chroot du media")
 
     def test_premier_demarrage(self):
         u = (R / "etc/systemd/system/pincabos-dmd-installer.service").read_text(encoding="utf-8")
