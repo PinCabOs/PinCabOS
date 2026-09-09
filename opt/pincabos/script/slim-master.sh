@@ -171,3 +171,15 @@ echo "  apres : $APRES"
 echo
 echo "  noyau embarque : $GARDE"
 chroot "$M" dpkg -l 2>/dev/null | awk '/linux-(image|modules|headers)/ {print "    " $1, $2, $3}' || true
+
+# PINCABOS_MASTER_SANS_RESIDUS_V1 : build-master.sh recopie le depot avec
+# « rsync -a » SANS --delete. Tout ce qui a ete livre un jour reste donc dans le
+# master pour toujours. On y a trouve les journaux et les sauvegardes du cabinet
+# du mainteneur — vpinball.log faisait 3,1 Mo a lui seul — expedies dans chaque
+# ISO. On ne touche qu a ce que personne ne lit : les manifests apt de config/
+# sont references par pkg-pincabos-web.manifest.json, ils restent.
+echo "--- journaux et sauvegardes du cabinet d origine ---"
+rm -f "$M"/home/pinball/.config/vpinfe/vpinfe-start-*.log \
+      "$M"/home/pinball/.config/vpinfe/vpinfe.ini.backup-screens-* \
+      "$M"/home/pinball/.config/vpinfe/vpinfe.ini.full-merged-* \
+      "$M"/home/pinball/.vpinball/vpinball.log 2>/dev/null || true
