@@ -4,7 +4,7 @@ umask 077
 clear 2>/dev/null || true
 
 EXPECTED_USER="pinball"
-RAW_AUDIT="https://raw.githubusercontent.com/KarotsSugarpie/PinCabOS/main/DEV/config-testeur/pincabos-system-audit-v4.sh"
+RAW_AUDIT="https://raw.githubusercontent.com/PinCabOs/PinCabOS/main/DEV/config-testeur/pincabos-system-audit-v4.sh"
 WORK_DIR="$HOME/.cache/pincabos-tester-report"
 AUDIT_SCRIPT="$WORK_DIR/pincabos-system-audit-v4.sh"
 RUNNER="$WORK_DIR/pincabos-system-audit-runner-v4.sh"
@@ -26,23 +26,40 @@ command -v python3 >/dev/null 2>&1 || { say "NOGO [PROTECTION] python3 absent.";
 
 say "================================================================"
 say " PINFORGE-SAFE - PINCABOS TESTER SYSTEM AUDIT V4"
-say " MODE RESILIENT SSH"
+say " MODE RESILIENT SSH / WEBAPP"
 say " CLOUDFLARE GATEWAY -> GITHUB"
-say " AUCUN TOKEN SUR LE CABINET"
+say " AUCUN TOKEN GITHUB SUR LE CABINET"
+say " IDENTITE PINCABOS.CC PROTEGEE LOCALEMENT"
 say "================================================================"
 say
 
-# Le nom vient automatiquement de la session PinCabOS qui a jumele le cabinet.
-# PINCABOS_SESSION_NAME = display_name du compte, sinon username.
-# Aucun prompt interactif: un lancement automatique sans identite de session
-# doit echouer proprement plutot que rester bloque en attente de saisie.
+# Priorité à une identité déjà vérifiée par la WebApp. Sinon, résolution
+# directe via le bridge root-protégé PinCabOS.cc. Aucun device_token n'est
+# exposé au shell, au navigateur ou au rapport.
 TESTER_NAME="${PINCABOS_SESSION_NAME:-${PINCABOS_TESTER_NAME:-}}"
 TESTER_NAME="${TESTER_NAME#${TESTER_NAME%%[![:space:]]*}}"
 TESTER_NAME="${TESTER_NAME%${TESTER_NAME##*[![:space:]]}}"
 
 if [[ -z "$TESTER_NAME" ]]; then
-  say "NOGO [SESSION] Nom de session PinCabOS absent."
-  say "Le jumelage doit fournir PINCABOS_SESSION_NAME."
+  if command -v sudo >/dev/null 2>&1 && [[ -x /usr/local/sbin/pincabos-account-bridge ]]; then
+    TESTER_NAME="$(
+      sudo -n /usr/local/sbin/pincabos-account-bridge context 2>/dev/null |
+      python3 -c 'import json,sys
+try:
+ d=json.load(sys.stdin)
+ u=d.get("user") or {}
+ print((u.get("display_name") or u.get("username") or "").strip())
+except Exception:
+ print("")' 2>/dev/null || true
+    )"
+  fi
+fi
+
+TESTER_NAME="${TESTER_NAME#${TESTER_NAME%%[![:space:]]*}}"
+TESTER_NAME="${TESTER_NAME%${TESTER_NAME##*[![:space:]]}}"
+
+if [[ -z "$TESTER_NAME" ]]; then
+  say "NOGO [SESSION] Cabinet non jumelé ou nom PinCabOS.cc indisponible."
   exit 1
 fi
 
@@ -88,14 +105,18 @@ say "----------------------------------------------------------------"
 tail --pid="$PID" -n +1 -f "$LOG_FILE" 2>/dev/null || true
 
 say "----------------------------------------------------------------"
+FINAL_RC=0
 if [[ -f "$STATUS_FILE" ]]; then
   RC="$(cat "$STATUS_FILE" 2>/dev/null || echo 1)"
   if [[ "$RC" == "0" ]]; then
     say "GO [OK] Audit termine et transmis."
   else
     say "NOGO [AUDIT] Le job a termine avec le code $RC."
+    FINAL_RC="$RC"
   fi
 else
-  say "INFO Le suivi SSH s'est termine avant le job. Le job detache continue."
+  say "NOGO [AUDIT] Statut final absent après la fin du job."
+  FINAL_RC=3
 fi
 say "Journal conserve : $LOG_FILE"
+exit "$FINAL_RC"
