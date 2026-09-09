@@ -1,4 +1,4 @@
-const REPO = "KarotsSugarpie/PinCabOS";
+const REPO = "PinCabOs/PinCabOS";
 const API_VERSION = "2022-11-28";
 const MAX_ENCODED = 900000;
 const CHUNK_SIZE = 45000;
@@ -24,11 +24,16 @@ function slug(value, fallback) {
 }
 
 async function github(env, path, method = "POST", body = undefined) {
+  const token = String(env.GITHUB_TOKEN || "").trim();
+  if (!token) {
+    throw new Error("github_token_missing");
+  }
+
   const response = await fetch(`https://api.github.com/repos/${REPO}${path}`, {
     method,
     headers: {
       accept: "application/vnd.github+json",
-      authorization: `Bearer ${env.GITHUB_TOKEN}`,
+      authorization: `Bearer ${token}`,
       "content-type": "application/json",
       "user-agent": "PinCabOS-Tester-Upload-Worker/4",
       "x-github-api-version": API_VERSION,
@@ -39,8 +44,13 @@ async function github(env, path, method = "POST", body = undefined) {
   const text = await response.text();
   let payload = {};
   try { payload = text ? JSON.parse(text) : {}; } catch { payload = { message: text }; }
+
   if (!response.ok) {
-    throw new Error(`github_http_${response.status}:${payload.message || "unknown"}`);
+    const accepted = response.headers.get("x-accepted-github-permissions") || "";
+    const permissionHint = accepted ? `;accepted=${accepted}` : "";
+    throw new Error(
+      `github_http_${response.status}:${payload.message || "unknown"};repo=${REPO}${permissionHint}`,
+    );
   }
   return payload;
 }
@@ -50,7 +60,12 @@ export default {
     const url = new URL(request.url);
 
     if (request.method === "GET" && url.pathname === "/health") {
-      return json({ ok: true, service: "pincabos-tester-upload", version: 4 });
+      return json({
+        ok: true,
+        service: "pincabos-tester-upload",
+        version: 4,
+        repository: REPO,
+      });
     }
 
     if (request.method !== "POST" || url.pathname !== "/v1/tester-report") {
