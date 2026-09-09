@@ -146,6 +146,30 @@ ARRANGEMENTS = (
 ORDRES_COULEUR = ("RGB", "RBG", "GRB", "GBR", "BRG", "BGR")
 MODES = ("matrice", "rubans")
 MAX_SORTIES = 10
+
+# PINCABOS_TOYS_ROLES_V1 : à quoi sert chaque sortie adressable. Le rôle donne
+# son nom au toy dans cabinet.xml — c'est ce nom que DOF cherche ensuite. Sans
+# rôle, on retombe sur le nom générique d'avant (« Ruban 1.2 »), qui ne dit rien
+# à personne quand il faut relire sa configuration six mois plus tard.
+# « backboard » garde « Backboard HD » : c'est le nom qu'ont déjà les cabinets
+# en service, et le changer casserait leur configuration DOF.
+ROLES = (
+    ("backboard", "Backboard HD"),
+    ("sous-caisse", "Undercab"),
+    ("cote-gauche", "Left Side"),
+    ("cote-droit", "Right Side"),
+    ("fronton", "Backbox"),
+    ("flippers", "Flippers"),
+    ("interieur", "Inside Cabinet"),
+    ("libre", ""),
+)
+ROLE_IDS = tuple(r for r, _ in ROLES)
+ROLE_NOMS = dict(ROLES)
+
+
+def nom_toy(role: str, defaut: str) -> str:
+    """Le nom que portera le toy : celui du rôle, ou le nom générique."""
+    return ROLE_NOMS.get(str(role or ""), "") or defaut
 MAX_LEDS_SORTIE = 1100
 
 
@@ -206,7 +230,8 @@ def proposer_toys(detectes: list) -> dict:
         ctrls.append({"serial": c["serial"], "type": c["type"], "enabled": False,
                       "ledwiz_number": 30 + i, "brightness": 25, "color_order": "GRB",
                       "mode": "matrice", "width": 0, "height": 0,
-                      "arrangement": "TopDownAlternateLeftRight", "strips": []})
+                      "arrangement": "TopDownAlternateLeftRight", "strips": [],
+                      "role": "", "roles": []})
     return {"controllers": ctrls}
 
 
@@ -254,6 +279,21 @@ def valider_toys(choix, detectes: list) -> tuple[list, dict]:
         prop["arrangement"] = str(c.get("arrangement") or "TopDownAlternateLeftRight")
         if prop["arrangement"] not in ARRANGEMENTS:
             erreurs.append(f"contrôleur {i + 1} : arrangement inconnu")
+        # PINCABOS_TOYS_ROLES_V1 : le rôle est facultatif — sans lui on garde le
+        # nom générique. En matrice, un seul rôle pour tout le contrôleur ; en
+        # rubans, un par sortie, aligné sur strips.
+        prop["role"] = str(c.get("role") or "")
+        if prop["role"] and prop["role"] not in ROLE_IDS:
+            erreurs.append(f"contrôleur {i + 1} : rôle inconnu {prop['role']}")
+        roles_bruts = c.get("roles") if isinstance(c.get("roles"), list) else []
+        roles_ok = []
+        for r in roles_bruts[:MAX_SORTIES]:
+            r = str(r or "")
+            if r and r not in ROLE_IDS:
+                erreurs.append(f"contrôleur {i + 1} : rôle inconnu {r}")
+                break
+            roles_ok.append(r)
+        prop["roles"] = roles_ok
         if mode == "matrice":
             # PINCABOS_TOYS_SANS_SUPPOSITION_V1 : zero est desormais une reponse
             # valide — c est celle d un controleur qu on laisse eteint parce
@@ -286,17 +326,21 @@ def inventaire_json(choix: dict, detectes: list) -> dict:
              "label": f"{t} {i + 1}", "enabled": bool(c["enabled"]), "serial": c["serial"], "com_port": "auto",
              "host": "", "leds_per_strip": (list(c["strips"]) + [0] * MAX_SORTIES)[:MAX_SORTIES],
              "ledwiz_number": c["ledwiz_number"]}
+        roles = list(c.get("roles") or [])
         if c["mode"] == "matrice":
-            d["toy"] = {"name": "Backboard HD" if i == 0 else f"Matrice {i + 1}", "width": c["width"], "height": c["height"],
+            d["toy"] = {"name": nom_toy(c.get("role"), "Backboard HD" if i == 0 else f"Matrice {i + 1}"),
+                        "width": c["width"], "height": c["height"],
                         "arrangement": c["arrangement"], "color_order": c["color_order"], "first_led": 1,
                         "brightness": c["brightness"], "fading_curve": "Linear"}
             d["ledwiz_outputs"] = 9
         else:
             toys, premier, k = [], 1, 0
-            for s in c["strips"]:
+            for sortie, s in enumerate(c["strips"]):
                 if s > 0:
                     k += 1
-                    toys.append({"name": f"Ruban {i + 1}.{k}", "width": s, "height": 1, "arrangement": "LeftRightTopDown",
+                    role = roles[sortie] if sortie < len(roles) else ""
+                    toys.append({"name": nom_toy(role, f"Ruban {i + 1}.{k}"),
+                                 "width": s, "height": 1, "arrangement": "LeftRightTopDown",
                                  "color_order": c["color_order"], "first_led": premier, "brightness": c["brightness"],
                                  "fading_curve": "Linear"})
                 premier += s
