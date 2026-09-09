@@ -1,61 +1,16 @@
 # PINCABOS_PAS_DE_NOUVEAU_DOUBLON_V1
-# Fichiers suivis strictement identiques, releves le 10/09/2026.
-# Cette liste ne doit que RETRECIR : un groupe qui n'y est pas fait echouer
+# Fichiers suivis strictement identiques — de VRAIES copies, pas des liens.
+# Releve du 10/09/2026.
+#
+# Piege : sha256sum SUIT les liens symboliques. Un detecteur qui les inclut
+# voit 54 groupes la ou le projet en a deja 51 en liens, et annonce 26 902
+# lignes dupliquees au lieu de 1523. On lit le mode git (120000 = lien).
+#
+# Cette liste ne doit que RETRECIR : un groupe qui n y est pas fait echouer
 # test_hygiene. Quand un groupe est deduplique, retirez sa ligne.
 #
-# 54 groupes, 26902 lignes dupliquees.
+# 3 groupes, 1523 lignes dupliquees.
 #
-opt/pincabos/bin/pincabos-close-active-chrome-tab.sh usr/local/bin/pincabos-close-active-chrome-tab usr/local/bin/pincabos-close-active-chrome-tab.sh
-opt/pincabos/bin/pincabos-link usr/local/bin/pincabos-link
-opt/pincabos/bin/pincabos-link-heartbeat usr/local/bin/pincabos-link-heartbeat
-opt/pincabos/bin/pincabos-web-reboot.sh usr/local/bin/pincabos-web-reboot usr/local/bin/pincabos-web-reboot.sh
-opt/pincabos/install/03-install-check.sh usr/local/bin/03-install-check usr/local/bin/03-install-check.sh
-opt/pincabos/install/go-pincabos.sh usr/local/bin/go-pincabos usr/local/bin/go-pincabos.sh
-opt/pincabos/install/modules/network/mod-dhcp4.sh opt/pincabos/modules/network/mod-dhcp4.sh usr/local/bin/mod-dhcp4 usr/local/bin/mod-dhcp4.sh
-opt/pincabos/install/modules/network/mod-ssid.sh opt/pincabos/modules/network/mod-ssid.sh usr/local/bin/mod-ssid usr/local/bin/mod-ssid.sh
-opt/pincabos/install/modules/system/mod-splash.sh opt/pincabos/modules/system/mod-splash.sh usr/local/bin/mod-splash usr/local/bin/mod-splash.sh
-opt/pincabos/install/packages/pkg-apt-base.sh usr/local/bin/pkg-apt-base usr/local/bin/pkg-apt-base.sh
-opt/pincabos/install/packages/pkg-chrome.sh usr/local/bin/pkg-chrome usr/local/bin/pkg-chrome.sh
-opt/pincabos/install/packages/pkg-lib.sh usr/local/bin/pkg-lib usr/local/bin/pkg-lib.sh
-opt/pincabos/install/packages/pkg-lightdm.sh usr/local/bin/pkg-lightdm usr/local/bin/pkg-lightdm.sh
-opt/pincabos/install/packages/pkg-monitoring.sh usr/local/bin/pkg-monitoring usr/local/bin/pkg-monitoring.sh
-opt/pincabos/install/packages/pkg-nginx.sh usr/local/bin/pkg-nginx usr/local/bin/pkg-nginx.sh
-opt/pincabos/install/packages/pkg-openbox.sh usr/local/bin/pkg-openbox usr/local/bin/pkg-openbox.sh
-opt/pincabos/install/packages/pkg-plymouth.sh usr/local/bin/pkg-plymouth usr/local/bin/pkg-plymouth.sh
-opt/pincabos/install/packages/pkg-python.sh usr/local/bin/pkg-python usr/local/bin/pkg-python.sh
-opt/pincabos/install/packages/pkg-system-validation.sh usr/local/bin/pkg-system-validation usr/local/bin/pkg-system-validation.sh
-opt/pincabos/install/packages/pkg-x11.sh usr/local/bin/pkg-x11 usr/local/bin/pkg-x11.sh
-opt/pincabos/modules/system/mod-plymouth-install.sh usr/local/bin/mod-plymouth-install usr/local/bin/mod-plymouth-install.sh
-opt/pincabos/modules/system/mod-plymouth-load.sh usr/local/bin/mod-plymouth-load usr/local/bin/mod-plymouth-load.sh
-opt/pincabos/script/iso.sh opt/pincabos/scripts/iso.sh usr/local/bin/iso.sh usr/local/bin/pincabos-iso usr/local/sbin/iso.sh usr/local/sbin/pincabos-iso
-opt/pincabos/script/updatehelp.sh usr/local/bin/updatehelp.sh usr/local/sbin/updatehelp.sh
-opt/pincabos/tools/auto-detect-screens.sh usr/local/bin/auto-detect-screens usr/local/bin/auto-detect-screens.sh
-opt/pincabos/tools/close-dmd-calibrator.sh usr/local/bin/close-dmd-calibrator usr/local/bin/close-dmd-calibrator.sh
-opt/pincabos/tools/close-fulldmd-calibrator.sh usr/local/bin/close-fulldmd-calibrator usr/local/bin/close-fulldmd-calibrator.sh
-opt/pincabos/tools/close-webapp-screen.sh usr/local/bin/close-webapp-screen usr/local/bin/close-webapp-screen.sh
-opt/pincabos/tools/detect-gpu.sh usr/local/bin/detect-gpu usr/local/bin/detect-gpu.sh
-opt/pincabos/tools/firstrun-network-detect.sh usr/local/bin/firstrun-network-detect usr/local/bin/firstrun-network-detect.sh
-opt/pincabos/tools/go.sh usr/local/bin/go usr/local/bin/go.sh
-opt/pincabos/tools/install-pincabos-sudoers.sh usr/local/bin/install-pincabos-sudoers usr/local/bin/install-pincabos-sudoers.sh
-opt/pincabos/tools/launch-dmd-calibrator.sh usr/local/bin/launch-dmd-calibrator usr/local/bin/launch-dmd-calibrator.sh
-opt/pincabos/tools/launch-fulldmd-calibrator.sh usr/local/bin/launch-fulldmd-calibrator usr/local/bin/launch-fulldmd-calibrator.sh
-opt/pincabos/tools/launch-webapp-screen.sh usr/local/bin/launch-webapp-screen usr/local/bin/launch-webapp-screen.sh
-opt/pincabos/tools/network-current-mode.sh usr/local/bin/network-current-mode usr/local/bin/network-current-mode.sh
-opt/pincabos/tools/network-info.sh usr/local/bin/network-info usr/local/bin/network-info.sh
-opt/pincabos/tools/network-set-dhcp.sh usr/local/bin/network-set-dhcp usr/local/bin/network-set-dhcp.sh
-opt/pincabos/tools/network-set-static.sh usr/local/bin/network-set-static usr/local/bin/network-set-static.sh
-opt/pincabos/tools/pincabos-admin-iso-game-mode.sh usr/local/bin/pincabos-admin-iso-game-mode usr/local/bin/pincabos-admin-iso-game-mode.sh
-opt/pincabos/tools/pincabos-alpha-migration-audit.sh usr/local/bin/pincabos-alpha-migration-audit usr/local/bin/pincabos-alpha-migration-audit.sh
-opt/pincabos/tools/pincabos-cleanup.sh usr/local/bin/pincabos-cleanup usr/local/bin/pincabos-cleanup.sh
-opt/pincabos/tools/pincabos-exit-firstboot-safe.sh usr/local/bin/pincabos-exit-firstboot-safe usr/local/bin/pincabos-exit-firstboot-safe.sh
-opt/pincabos/tools/pincabos-freeze-dev-for-iso.sh usr/local/bin/pincabos-freeze-dev-for-iso usr/local/bin/pincabos-freeze-dev-for-iso.sh
-opt/pincabos/tools/pincabos-screen-xrandr.sh usr/local/bin/pincabos-screen-xrandr usr/local/bin/pincabos-screen-xrandr.sh
-opt/pincabos/tools/pincabos-smb-mount-helper.sh usr/local/bin/pincabos-smb-mount-helper usr/local/bin/pincabos-smb-mount-helper.sh
-opt/pincabos/tools/pincabos-sync-dmd-calibrations.sh usr/local/bin/pincabos-sync-dmd-calibrations usr/local/bin/pincabos-sync-dmd-calibrations.sh
-opt/pincabos/tools/publy.sh usr/local/bin/publy usr/local/bin/publy.sh
-opt/pincabos/tools/wifi-hotspot-stop.sh usr/local/bin/wifi-hotspot-stop usr/local/bin/wifi-hotspot-stop.sh
-opt/pincabos/tools/wifi-hotspot.sh usr/local/bin/wifi-hotspot usr/local/bin/wifi-hotspot.sh
-opt/pincabos/tools/wifi-join.sh usr/local/bin/wifi-join usr/local/bin/wifi-join.sh
-opt/pincabos/tools/wifi-scan.sh usr/local/bin/wifi-scan usr/local/bin/wifi-scan.sh
-usr/local/bin/gitpush usr/local/bin/gitpush.sh
-usr/local/bin/pincabos usr/local/sbin/pincabos
+opt/pincabos/install/modules/network/mod-dhcp4.sh opt/pincabos/modules/network/mod-dhcp4.sh
+opt/pincabos/install/modules/network/mod-ssid.sh opt/pincabos/modules/network/mod-ssid.sh
+opt/pincabos/install/modules/system/mod-splash.sh opt/pincabos/modules/system/mod-splash.sh

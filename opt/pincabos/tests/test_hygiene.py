@@ -3,10 +3,12 @@
 Un cliquet ne demande pas de tout réparer aujourd'hui : il fige l'existant et
 refuse que ça empire. Chacun des trois vient d'un piège qui a réellement mordu.
 
-  doublons     26 902 lignes strictement identiques, 13 % du code. Le même
-               programme en deux ou trois exemplaires : corriger l'un ne corrige
-               pas les autres, et rien ne dit lequel s'exécute.
-  rm -rf       36 fichiers effacent « $VAR » sans garde. J'ai écrit une de ces
+  doublons     3 groupes, 1 523 lignes. Attention au piège : `sha256sum` SUIT
+               les liens symboliques. Un détecteur naïf voit 54 groupes et
+               26 902 lignes là où le projet a déjà posé 51 groupes de liens —
+               c'est l'erreur que j'ai commise en écrivant la revue. Seul le
+               mode git (120000) distingue un lien d'une copie.
+  rm -rf       des fichiers effacent « $VAR » sans garde. J'ai écrit une de ces
                lignes le 09/09 avec une variable qui n'existait pas ; seul le
                « set -u » du script a évité le dégât.
   [Install]    l'unité de rotation du playfield vivait dans un .target.wants
@@ -34,10 +36,22 @@ def _lignes(fichier):
 
 
 def _fichiers_de_code():
-    suivis = subprocess.run(["git", "-C", str(R), "ls-files"],
-                            capture_output=True, text=True).stdout.splitlines()
+    """Les fichiers RÉELS, jamais les liens symboliques.
+
+    Piège pris le 10/09/2026 : `sha256sum` suit les liens. Un détecteur qui
+    les inclut voit 54 « groupes de copies » là où le projet a en réalité déjà
+    posé 51 groupes de liens — et annonce 26 902 lignes dupliquées au lieu de
+    1 523. `git ls-files -s` donne le mode 120000 pour un lien : c'est la seule
+    façon fiable de les distinguer."""
+    modes = {}
+    for l in subprocess.run(["git", "-C", str(R), "ls-files", "-s"],
+                            capture_output=True, text=True).stdout.splitlines():
+        m, _, _, f = l.split(None, 3)
+        modes[f] = m
     out = []
-    for f in suivis:
+    for f, mode in modes.items():
+        if mode == "120000":          # lien symbolique : ce n'est pas une copie
+            continue
         p = R / f
         if not p.is_file():
             continue
@@ -49,7 +63,7 @@ def _fichiers_de_code():
                     out.append(f)
             except OSError:
                 pass
-    return out
+    return sorted(out)
 
 
 class PasDeNouveauDoublon(unittest.TestCase):

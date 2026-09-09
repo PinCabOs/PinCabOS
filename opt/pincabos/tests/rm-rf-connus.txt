@@ -1,9 +1,10 @@
 # PINCABOS_PAS_DE_NOUVEAU_RM_RF_V1
-# Fichiers ou « rm -rf "$VAR" » n'est pas garde par :? ou :-, releves le
-# 10/09/2026. Une variable vide efface alors la racine du chemin parent.
+# Fichiers REELS (jamais les liens) ou « rm -rf "$VAR" » n est pas garde
+# par :? ou :-. Releve du 10/09/2026. Une variable vide efface alors la
+# racine du chemin parent.
 # Cette liste ne doit que RETRECIR.
 #
-# 36 fichiers.
+# 23 fichiers.
 #
 opt/pincabos/apps/PinCabShare/uninstall.sh
 opt/pincabos/install/02-install-engine.sh
@@ -18,6 +19,7 @@ opt/pincabos/script/iso/40-payload.sh
 opt/pincabos/script/iso/80-live-rootfs.sh
 opt/pincabos/script/slim-master.sh
 opt/pincabos/script/updatehelp.sh
+opt/pincabos/tests/test_hygiene.py
 opt/pincabos/tests/test_iso_etapes.py
 opt/pincabos/tests/test_live_xorg.py
 opt/pincabos/tools/launch-dmd-calibrator.sh
@@ -26,18 +28,4 @@ opt/pincabos/tools/launch-webapp-screen.sh
 opt/pincabos/tools/pincabos-backglass-bridge.sh
 opt/pincabos/tools/pincabos-gitpush-release-root.sh
 opt/pincabos/tools/publy.sh
-usr/local/bin/launch-dmd-calibrator
-usr/local/bin/launch-dmd-calibrator.sh
-usr/local/bin/launch-fulldmd-calibrator
-usr/local/bin/launch-fulldmd-calibrator.sh
-usr/local/bin/launch-webapp-screen
-usr/local/bin/launch-webapp-screen.sh
-usr/local/bin/mod-plymouth-install
-usr/local/bin/mod-plymouth-install.sh
-usr/local/bin/mod-plymouth-load
-usr/local/bin/mod-plymouth-load.sh
-usr/local/bin/publy
-usr/local/bin/publy.sh
-usr/local/bin/updatehelp.sh
 usr/local/sbin/pincabos-chat-backglass
-usr/local/sbin/updatehelp.sh
