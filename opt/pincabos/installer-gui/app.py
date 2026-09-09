@@ -379,6 +379,8 @@ def toys_detection():
             "auto": pco_dof.cartes_auto(det) if pco_dof else [],
             "strips": pco_dof.controleurs_de_rubans(det) if pco_dof else [],
             "arrangements": list(pco_dof.ARRANGEMENTS) if pco_dof else [], "color_orders": list(pco_dof.ORDRES_COULEUR) if pco_dof else [],
+            # PINCABOS_TOYS_ROLES_V1 : à quoi sert chaque sortie adressable
+            "roles": list(pco_dof.ROLE_IDS) if pco_dof else [],
             "proposition": pco_dof.proposer_toys(det) if pco_dof else {"controllers": []}, "_det": det}
 
 

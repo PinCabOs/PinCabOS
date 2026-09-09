@@ -651,6 +651,11 @@ function renderToys(){
   if(!strips.length){box.innerHTML='<div class="card"><div class="hint" style="margin:0">'+esc(t("toys_strips_none"))+'</div></div>';refreshToysStatus();return}
   box.innerHTML=S.toys.controllers.map((c,i)=>{const hw=strips.find(s=>s.serial===c.serial)||{};
     const sel=(id,opts,val)=>'<select data-i="'+i+'" data-k="'+id+'">'+opts.map(o=>'<option value="'+o+'"'+(o===val?" selected":"")+'>'+o+'</option>').join("")+'</select>';
+    // PINCABOS_TOYS_ROLES_V1 : le rôle donne son nom au toy dans cabinet.xml.
+    // Sans rôle, on garde le nom générique d'avant (« Ruban 1.2 »).
+    const selRole=(k,val)=>'<select data-i="'+i+'" data-k="'+k+'">'
+      +'<option value=""'+(val?"":" selected")+'>'+esc(t("toys_role_aucun"))+'</option>'
+      +(d.roles||[]).map(r=>'<option value="'+esc(r)+'"'+(r===val?" selected":"")+'>'+esc(t("toys_role_"+r))+'</option>').join("")+'</select>';
     const num=(k,val,min,max)=>'<input type="number" data-i="'+i+'" data-k="'+k+'" value="'+esc(val)+'" min="'+min+'" max="'+max+'" style="min-width:90px;flex:0 0 110px">';
     return '<div class="card" style="margin-bottom:14px"><div class="row" style="margin-bottom:8px"><label>'+esc(hw.kind||c.type)+(c.serial?' #'+esc(c.serial):'')+'</label>'
       +'<div class="seg"><button type="button" class="segb'+(c.enabled?" sel":"")+'" data-i="'+i+'" data-act="enable">'+esc(t("toys_used"))+'</button></div></div>'
@@ -659,10 +664,15 @@ function renderToys(){
       +'<button type="button" class="segb'+(c.mode==="rubans"?" sel":"")+'" data-i="'+i+'" data-act="mode" data-v="rubans">'+esc(t("toys_mode_strips"))+'</button></div></div>'
       +(c.mode==="matrice"?'<div class="row"><label>'+esc(t("toys_size"))+'</label>'+num("width",c.width,1,1024)+' × '+num("height",c.height,1,1024)
         +'<span class="hint" style="margin:0">= '+((+c.width)*(+c.height))+' LED</span></div>'
-        +'<div class="row"><label>'+esc(t("toys_arrangement"))+'</label>'+sel("arrangement",d.arrangements||[],c.arrangement)+'</div>':'')
+        +'<div class="row"><label>'+esc(t("toys_arrangement"))+'</label>'+sel("arrangement",d.arrangements||[],c.arrangement)+'</div>'
+        +'<div class="row"><label>'+esc(t("toys_role"))+'</label>'+selRole("role",c.role||"")+'</div>':'')
       +'<div class="row"><label>'+esc(t("toys_outputs"))+'</label><input type="text" data-i="'+i+'" data-k="strips" value="'+esc((c.strips||[]).join(", "))+'" spellcheck="false">'
       +'<span class="hint" style="margin:0">'+esc(t("toys_total"))+' '+stripsTotal(c)+'</span></div>'
       +'<div class="hint" style="margin-top:0">'+esc(t(c.mode==="matrice"?"toys_outputs_hint_matrix":"toys_outputs_hint_strips"))+'</div>'
+      +(c.mode==="rubans"?(c.strips||[]).map((n,j)=>n>0
+        ? '<div class="row"><label>'+esc(t("toys_role_output").replace("%n",j+1))+'</label>'+selRole("role"+j,(c.roles||[])[j]||"")
+          +'<span class="hint" style="margin:0">'+n+' LED</span></div>'
+        : "").join(""):"")
       +'<div class="row"><label>'+esc(t("toys_color"))+'</label>'+sel("color_order",d.color_orders||[],c.color_order)
       +'<label style="min-width:auto">'+esc(t("toys_brightness"))+'</label>'+num("brightness",c.brightness,1,100)
       +'<label style="min-width:auto">'+esc(t("toys_ledwiz"))+'</label>'+num("ledwiz_number",c.ledwiz_number,1,128)+'</div>':'')
@@ -677,11 +687,18 @@ document.getElementById("toys-strips").addEventListener("click",e=>{const b=e.ta
   renderToys()});
 document.getElementById("toys-strips").addEventListener("input",e=>{const el=e.target;if(!el.dataset.k)return;const c=toysCtrl(+el.dataset.i);S.toys.touched=true;
   if(el.dataset.k==="strips"){c.strips=el.value.split(/[\s,;]+/).filter(x=>x!=="").map(x=>Math.max(0,parseInt(x,10)||0)).slice(0,10)}
+  else if(/^role\d+$/.test(el.dataset.k)){const j=+el.dataset.k.slice(4);
+    c.roles=c.roles||[];while(c.roles.length<=j)c.roles.push("");c.roles[j]=el.value}
   else if(["width","height","brightness","ledwiz_number"].includes(el.dataset.k)){c[el.dataset.k]=parseInt(el.value,10)||0}
   else{c[el.dataset.k]=el.value}
   refreshToysStatus();
   const tot=el.closest(".card");if(tot){const sp=tot.querySelectorAll(".hint");}});
-document.getElementById("toys-strips").addEventListener("change",e=>{if(e.target.dataset.k)renderToys()});
+document.getElementById("toys-strips").addEventListener("change",e=>{
+  const el=e.target;if(!el.dataset.k)return;const c=toysCtrl(+el.dataset.i);S.toys.touched=true;
+  if(/^role\d+$/.test(el.dataset.k)){const j=+el.dataset.k.slice(4);
+    c.roles=c.roles||[];while(c.roles.length<=j)c.roles.push("");c.roles[j]=el.value}
+  else if(el.dataset.k==="role"){c.role=el.value}
+  renderToys()});
 // PINCABOS_INSTALLEUR_RESEAU_V1 — étape Réseau : DHCP par défaut, IP fixe
 // proposée depuis le bail, Wi-Fi seulement si un matériel est présent. Chaque
 // application est immédiate dans la session (le résultat se voit) ; le réseau

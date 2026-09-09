@@ -214,7 +214,19 @@
     "inputs_more": "Voir toutes les actions",
     "inputs_less": "Ne voir que l'essentiel",
     "inputs_count": "%n bouton(s) reconnu(s) — ils seront posés à l'installation.",
-    "inputs_skip_ok": "Aucun bouton appuyé : vous pourrez le faire dans Map Commander."
+    "inputs_skip_ok": "Aucun bouton appuyé : vous pourrez le faire dans Map Commander.",
+    "toys_role": "Rôle",
+    "toys_role_output": "Sortie %n",
+    "toys_role_aucun": "— sans rôle —",
+    "toys_role_backboard": "Backboard",
+    "toys_role_sous-caisse": "Sous le meuble",
+    "toys_role_cote-gauche": "Côté gauche",
+    "toys_role_cote-droit": "Côté droit",
+    "toys_role_fronton": "Fronton",
+    "toys_role_flippers": "Flippers",
+    "toys_role_interieur": "Intérieur du meuble",
+    "toys_role_libre": "Libre",
+    "toys_role_hint": "Le rôle donne son nom à la sortie dans la configuration DOF. Sans lui, elle s'appellera « Ruban 1.2 » — exact, mais illisible le jour où vous relirez votre cabinet."
   },
   "en": {
     "choose_lang": "Choose your language",
@@ -431,7 +443,19 @@
     "inputs_more": "Show every action",
     "inputs_less": "Show the essentials only",
     "inputs_count": "%n button(s) recognised — they will be applied at install time.",
-    "inputs_skip_ok": "No button pressed: you will be able to do it in Map Commander."
+    "inputs_skip_ok": "No button pressed: you will be able to do it in Map Commander.",
+    "toys_role": "Role",
+    "toys_role_output": "Output %n",
+    "toys_role_aucun": "— no role —",
+    "toys_role_backboard": "Backboard",
+    "toys_role_sous-caisse": "Under the cabinet",
+    "toys_role_cote-gauche": "Left side",
+    "toys_role_cote-droit": "Right side",
+    "toys_role_fronton": "Backbox",
+    "toys_role_flippers": "Flippers",
+    "toys_role_interieur": "Inside the cabinet",
+    "toys_role_libre": "Spare",
+    "toys_role_hint": "The role names the output in the DOF configuration. Without it, it will be called “Ruban 1.2” — accurate, but unreadable the day you come back to your cabinet."
   },
   "de": {
     "choose_lang": "Sprache auswählen",
@@ -648,7 +672,19 @@
     "inputs_more": "Alle Aktionen anzeigen",
     "inputs_less": "Nur das Wesentliche",
     "inputs_count": "%n Taste(n) erkannt — sie werden bei der Installation übernommen.",
-    "inputs_skip_ok": "Keine Taste gedrückt: Sie können es in Map Commander nachholen."
+    "inputs_skip_ok": "Keine Taste gedrückt: Sie können es in Map Commander nachholen.",
+    "toys_role": "Rolle",
+    "toys_role_output": "Ausgang %n",
+    "toys_role_aucun": "— ohne Rolle —",
+    "toys_role_backboard": "Backboard",
+    "toys_role_sous-caisse": "Unter dem Gehäuse",
+    "toys_role_cote-gauche": "Linke Seite",
+    "toys_role_cote-droit": "Rechte Seite",
+    "toys_role_fronton": "Backbox",
+    "toys_role_flippers": "Flipper",
+    "toys_role_interieur": "Gehäuseinneres",
+    "toys_role_libre": "Frei",
+    "toys_role_hint": "Die Rolle benennt den Ausgang in der DOF-Konfiguration. Ohne sie heißt er „Ruban 1.2“ — korrekt, aber unlesbar, wenn Sie Ihr Cabinet später wieder ansehen."
   },
   "it": {
     "choose_lang": "Scegli la tua lingua",
@@ -865,7 +901,19 @@
     "inputs_more": "Mostra tutte le azioni",
     "inputs_less": "Solo l'essenziale",
     "inputs_count": "%n pulsante/i riconosciuto/i — verranno applicati all'installazione.",
-    "inputs_skip_ok": "Nessun pulsante premuto: potrai farlo in Map Commander."
+    "inputs_skip_ok": "Nessun pulsante premuto: potrai farlo in Map Commander.",
+    "toys_role": "Ruolo",
+    "toys_role_output": "Uscita %n",
+    "toys_role_aucun": "— senza ruolo —",
+    "toys_role_backboard": "Backboard",
+    "toys_role_sous-caisse": "Sotto il mobile",
+    "toys_role_cote-gauche": "Lato sinistro",
+    "toys_role_cote-droit": "Lato destro",
+    "toys_role_fronton": "Backbox",
+    "toys_role_flippers": "Flipper",
+    "toys_role_interieur": "Interno del mobile",
+    "toys_role_libre": "Libera",
+    "toys_role_hint": "Il ruolo dà il nome all'uscita nella configurazione DOF. Senza, si chiamerà «Ruban 1.2» — esatto, ma illeggibile il giorno in cui rileggerai il tuo cabinato."
   },
   "es": {
     "choose_lang": "Elige tu idioma",
@@ -1082,6 +1130,18 @@
     "inputs_more": "Ver todas las acciones",
     "inputs_less": "Sólo lo esencial",
     "inputs_count": "%n botón(es) reconocido(s) — se aplicarán en la instalación.",
-    "inputs_skip_ok": "Ningún botón pulsado: podrás hacerlo en Map Commander."
+    "inputs_skip_ok": "Ningún botón pulsado: podrás hacerlo en Map Commander.",
+    "toys_role": "Función",
+    "toys_role_output": "Salida %n",
+    "toys_role_aucun": "— sin función —",
+    "toys_role_backboard": "Backboard",
+    "toys_role_sous-caisse": "Bajo el mueble",
+    "toys_role_cote-gauche": "Lado izquierdo",
+    "toys_role_cote-droit": "Lado derecho",
+    "toys_role_fronton": "Backbox",
+    "toys_role_flippers": "Flippers",
+    "toys_role_interieur": "Interior del mueble",
+    "toys_role_libre": "Libre",
+    "toys_role_hint": "La función da nombre a la salida en la configuración DOF. Sin ella se llamará «Ruban 1.2» — exacto, pero ilegible el día que vuelvas a tu mueble."
   }
 }
