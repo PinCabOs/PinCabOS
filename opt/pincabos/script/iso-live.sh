@@ -150,7 +150,10 @@ fi
 
 echo "=== 2) Live initrd ==="
 if [ -z "$KERNEL_VERSION" ]; then
-  KERNEL_VERSION="$(ls "$ROOTFS/lib/modules" | sort -V | tail -1)"
+  # PINCABOS_ISO_LIVE_KVER_V1 : le live prenait toujours le noyau le plus recent du
+  # rootfs. Des qu une reconstruction en installe un second, l ISO demarre sur un
+  # noyau que le parc n a jamais essaye (07/09/2026 : 7.0.0-31 par-dessus le 29).
+  KERNEL_VERSION="${PCO_LIVE_KVER:-$(ls "$ROOTFS/lib/modules" | sort -V | tail -1)}"
 fi
 [ -n "$KERNEL_VERSION" ] || die "no kernel found under $ROOTFS/lib/modules"
 echo "  kernel: $KERNEL_VERSION"
@@ -285,6 +288,12 @@ EXCLUDES=(
   "opt/pincabos/cache" "opt/pincabos/cache/*"
   "opt/pincabos/logs/*"
   "root/.cache" "root/.cache/*"
+  # PINCABOS_IMAGE_SANS_BROUILLONS_V1 : nos scripts de travail (pincab-batch-v31,
+  # v32, v32b, v33, v35b, v35c, v35d...) et les notes de conception de DEV/
+  # partaient sur CHAQUE cabinet. Ce n'est pas une question de place — 1 Mo sur
+  # 2,8 Go — mais le cabinet d'un utilisateur n'a pas a porter notre historique.
+  "root/pincab-*" "root/pincabos-*"
+  "DEV" "DEV/*"
   "var/cache/apt/*" "var/lib/apt/lists/*"
   "usr/sbin/policy-rc.d"
   # Not needed at runtime on a cab, and it all comes back with apt if wanted.

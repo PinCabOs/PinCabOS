@@ -1,0 +1,43 @@
+# PINCABOS_PAS_DE_NOUVEAU_RM_RF_V1
+# Fichiers ou « rm -rf "$VAR" » n'est pas garde par :? ou :-, releves le
+# 10/09/2026. Une variable vide efface alors la racine du chemin parent.
+# Cette liste ne doit que RETRECIR.
+#
+# 36 fichiers.
+#
+opt/pincabos/apps/PinCabShare/uninstall.sh
+opt/pincabos/install/02-install-engine.sh
+opt/pincabos/modules/system/mod-plymouth-install.sh
+opt/pincabos/modules/system/mod-plymouth-load.sh
+opt/pincabos/script/build-master.sh
+opt/pincabos/script/installer/pincabos-install-payload
+opt/pincabos/script/installer/pincabos-live-installer
+opt/pincabos/script/iso-live.sh
+opt/pincabos/script/iso/10-audit-nettoyage.sh
+opt/pincabos/script/iso/40-payload.sh
+opt/pincabos/script/iso/80-live-rootfs.sh
+opt/pincabos/script/slim-master.sh
+opt/pincabos/script/updatehelp.sh
+opt/pincabos/tests/test_iso_etapes.py
+opt/pincabos/tests/test_live_xorg.py
+opt/pincabos/tools/launch-dmd-calibrator.sh
+opt/pincabos/tools/launch-fulldmd-calibrator.sh
+opt/pincabos/tools/launch-webapp-screen.sh
+opt/pincabos/tools/pincabos-backglass-bridge.sh
+opt/pincabos/tools/pincabos-gitpush-release-root.sh
+opt/pincabos/tools/publy.sh
+usr/local/bin/launch-dmd-calibrator
+usr/local/bin/launch-dmd-calibrator.sh
+usr/local/bin/launch-fulldmd-calibrator
+usr/local/bin/launch-fulldmd-calibrator.sh
+usr/local/bin/launch-webapp-screen
+usr/local/bin/launch-webapp-screen.sh
+usr/local/bin/mod-plymouth-install
+usr/local/bin/mod-plymouth-install.sh
+usr/local/bin/mod-plymouth-load
+usr/local/bin/mod-plymouth-load.sh
+usr/local/bin/publy
+usr/local/bin/publy.sh
+usr/local/bin/updatehelp.sh
+usr/local/sbin/pincabos-chat-backglass
+usr/local/sbin/updatehelp.sh
