@@ -1,0 +1,199 @@
+#!/usr/bin/env python3
+"""PinCabOS — import DOF Config Tool par clé API (PINCABOS_DOF_IMPORT_API_V1).
+
+    pincabos-dof-online-api-import <clé API> [force|noforce]
+
+La page DOF de la WebApp appelle ce programme depuis toujours… et il n'a
+jamais existé : ni dans le dépôt, ni dans l'historique git, ni dans le master.
+La page affichait donc « Import DOF via API indisponible » sur tous les
+cabinets, et seul l'import ZIP manuel fonctionnait. Trouvé le 09/09/2026 en
+cherchant pourquoi un testeur n'avait aucune LED en table : sans les
+`directoutputconfig*.ini` de SON cabinet, DOF n'a rien à jouer.
+
+Le contrat de l'API vient du client de référence de Michael Kalkbrenner
+(github.com/mkalkbrenner/dof_configtool_client, DownloadController.php) :
+
+    GET http://configtool.vpuniverse.com/api.php?query=getconfig&apikey=<clé>
+        -> une archive ZIP contenant *.ini, *.xml et *.png
+
+Quand la clé est mauvaise, l'API répond du texte et non un ZIP : c'est ce
+texte qui explique l'erreur, on le montre tel quel plutôt qu'un « échec ».
+
+Les fichiers vont dans TOUS les dossiers DOF du cabinet : VPX (PrefPath) et
+VPinFE lisent chacun le leur, et un seul des deux servi donne un cabinet
+à moitié muet.
+"""
+from __future__ import annotations
+
+import glob
+import hashlib
+import shutil
+import ssl
+import sys
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
+import zipfile
+from datetime import datetime
+from pathlib import Path
+
+API = "configtool.vpuniverse.com/api.php?query=getconfig&apikey="
+CABINETS_GLOB = "/home/pinball/.local/share/VPinballX/*/directoutputconfig"
+CANONIQUE = Path("/home/pinball/.pincabos/vpx/directoutputconfig")
+SAUVEGARDES = Path("/opt/pincabos/backups/dof-configtool")
+JOUEUR = 1000
+# Ce que le Config Tool livre, et rien d'autre : on n'extrait jamais un nom
+# venu du réseau sans le filtrer (traversée de chemin).
+EXTENSIONS = (".ini", ".xml", ".png")
+DELAI = 120
+
+
+def dossiers_dof() -> list:
+    """VPX et VPinFE lisent chacun leur dossier : on sert les deux."""
+    trouves = [Path(d) for d in sorted(glob.glob(CABINETS_GLOB))]
+    if CANONIQUE not in trouves:
+        trouves.append(CANONIQUE)
+    return [d for d in trouves if d.parent.exists()] or [CANONIQUE]
+
+
+def telecharger(cle: str) -> bytes:
+    """L'archive, ou une exception qui porte le message de l'API."""
+    erreurs = []
+    for schema in ("https://", "http://"):
+        url = schema + API + urllib.parse.quote(cle, safe="")
+        try:
+            ctx = ssl.create_default_context()
+            with urllib.request.urlopen(url, timeout=DELAI, context=ctx) as r:
+                return r.read()
+        except urllib.error.HTTPError as exc:
+            corps = (exc.read() or b"")[:400].decode("utf-8", "replace").strip()
+            erreurs.append("%s : HTTP %s %s" % (schema.rstrip(":/"), exc.code, corps))
+        except Exception as exc:                       # réseau, TLS, DNS…
+            erreurs.append("%s : %s" % (schema.rstrip(":/"), exc))
+    raise RuntimeError(" ; ".join(erreurs))
+
+
+def est_une_archive(donnees: bytes) -> bool:
+    return donnees[:4] == b"PK\x03\x04"
+
+
+def noms_utiles(zf: zipfile.ZipFile) -> list:
+    """Seuls les fichiers attendus, et jamais de chemin : le nom de base suffit.
+
+    Une archive venue du réseau peut contenir « ../../etc/passwd » ; on ne
+    reconstruit donc aucun répertoire et on refuse tout nom vide ou absolu.
+    """
+    out = []
+    for info in zf.infolist():
+        if info.is_dir():
+            continue
+        base = Path(info.filename).name
+        if not base or base.startswith("."):
+            continue
+        if base.lower().endswith(EXTENSIONS):
+            out.append((info, base))
+    return out
+
+
+def sauvegarder(dossier: Path, horodatage: str) -> Path | None:
+    presents = [f for f in dossier.glob("*") if f.is_file()
+                and f.name.lower().endswith(EXTENSIONS)]
+    if not presents:
+        return None
+    cible = SAUVEGARDES / horodatage / dossier.name
+    cible.mkdir(parents=True, exist_ok=True)
+    for f in presents:
+        shutil.copy2(f, cible / f.name)
+    return cible
+
+
+def poser(zf: zipfile.ZipFile, entrees: list, dossier: Path, ecraser: bool) -> dict:
+    dossier.mkdir(parents=True, exist_ok=True)
+    bilan = {"ecrits": 0, "inchanges": 0, "gardes": 0}
+    for info, base in entrees:
+        contenu = zf.read(info)
+        cible = dossier / base
+        if cible.exists():
+            if hashlib.sha256(cible.read_bytes()).digest() == hashlib.sha256(contenu).digest():
+                bilan["inchanges"] += 1
+                continue
+            if not ecraser:
+                bilan["gardes"] += 1
+                continue
+        cible.write_bytes(contenu)
+        try:
+            shutil.chown(cible, JOUEUR, JOUEUR)
+        except (LookupError, PermissionError, OSError):
+            pass
+        bilan["ecrits"] += 1
+    try:
+        shutil.chown(dossier, JOUEUR, JOUEUR)
+    except (LookupError, PermissionError, OSError):
+        pass
+    return bilan
+
+
+def main(argv=None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if not argv or not argv[0].strip():
+        print("usage: pincabos-dof-online-api-import <clé API> [force|noforce]",
+              file=sys.stderr)
+        return 64
+    cle = argv[0].strip()
+    ecraser = (argv[1].strip().lower() == "force") if len(argv) > 1 else True
+
+    print("Téléchargement depuis le DOF Config Tool…")
+    try:
+        donnees = telecharger(cle)
+    except RuntimeError as exc:
+        print("NOGO [X] Téléchargement impossible : %s" % exc, file=sys.stderr)
+        return 1
+
+    if not est_une_archive(donnees):
+        # L'API répond du texte quand la clé est refusée : c'est LUI le message
+        # utile. Le montrer vaut mieux qu'un « échec » sans explication.
+        message = donnees[:400].decode("utf-8", "replace").strip() or "(réponse vide)"
+        print("NOGO [X] Le Config Tool n'a pas renvoyé d'archive.", file=sys.stderr)
+        print("         Sa réponse : %s" % message, file=sys.stderr)
+        print("         Vérifiez la clé API sur configtool.vpuniverse.com.", file=sys.stderr)
+        return 2
+
+    horodatage = datetime.now().strftime("%Y%m%d-%H%M%S")
+    with tempfile.TemporaryDirectory() as tmp:
+        archive = Path(tmp) / "config.zip"
+        archive.write_bytes(donnees)
+        try:
+            zf = zipfile.ZipFile(archive)
+        except zipfile.BadZipFile as exc:
+            print("NOGO [X] Archive illisible : %s" % exc, file=sys.stderr)
+            return 2
+        with zf:
+            entrees = noms_utiles(zf)
+            if not entrees:
+                print("NOGO [X] L'archive ne contient aucun fichier DOF "
+                      "(*.ini, *.xml, *.png).", file=sys.stderr)
+                return 2
+            inis = sum(1 for _, b in entrees if b.lower().endswith(".ini"))
+            print("Archive reçue : %d fichiers, dont %d directoutputconfig."
+                  % (len(entrees), inis))
+
+            total = {"ecrits": 0, "inchanges": 0, "gardes": 0}
+            for dossier in dossiers_dof():
+                sauvegarde = sauvegarder(dossier, horodatage)
+                bilan = poser(zf, entrees, dossier, ecraser)
+                for k in total:
+                    total[k] += bilan[k]
+                print("  %s : %d écrits, %d inchangés, %d gardés%s"
+                      % (dossier, bilan["ecrits"], bilan["inchanges"], bilan["gardes"],
+                         " (sauvegarde : %s)" % sauvegarde if sauvegarde else ""))
+
+    if total["gardes"] and not ecraser:
+        print("INFO [=] %d fichiers différents ont été gardés : relancez avec "
+              "« force » pour les remplacer." % total["gardes"])
+    print("GO [OK] Import DOF Config Tool terminé (%d fichiers écrits)." % total["ecrits"])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
