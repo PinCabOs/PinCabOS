@@ -202,7 +202,19 @@
     "hp_pos_SL": "fond du meuble gauche",
     "hp_pos_SR": "fond du meuble droit",
     "hp_pos_C": "centre du fronton",
-    "hp_pos_LFE": "caisson de graves"
+    "hp_pos_LFE": "caisson de graves",
+    "inputs_title": "Boutons",
+    "inputs_hint": "Votre cabinet est branché : appuyez sur chaque bouton, PinCabOS le reconnaît. Étape facultative — sans elle, seul le clavier répondra, et vous ferez le mappage plus tard dans Map Commander.",
+    "inputs_devices": "Cartes vues",
+    "inputs_devices_note": "Une carte de boutons (DudesCab, Pinscape, encodeur clavier…) apparaît ici dès qu'elle est branchée.",
+    "inputs_devices_none": "aucune carte de boutons vue (clavier seul)",
+    "inputs_press": "Appuyer",
+    "inputs_waiting": "appuyez maintenant…",
+    "inputs_timeout": "rien reçu — réessayez",
+    "inputs_more": "Voir toutes les actions",
+    "inputs_less": "Ne voir que l'essentiel",
+    "inputs_count": "%n bouton(s) reconnu(s) — ils seront posés à l'installation.",
+    "inputs_skip_ok": "Aucun bouton appuyé : vous pourrez le faire dans Map Commander."
   },
   "en": {
     "choose_lang": "Choose your language",
@@ -407,7 +419,19 @@
     "hp_pos_SL": "cabinet back left",
     "hp_pos_SR": "cabinet back right",
     "hp_pos_C": "backbox center",
-    "hp_pos_LFE": "subwoofer"
+    "hp_pos_LFE": "subwoofer",
+    "inputs_title": "Buttons",
+    "inputs_hint": "Your cabinet is plugged in: press each button and PinCabOS recognises it. Optional step — without it only the keyboard will answer, and you will map later in Map Commander.",
+    "inputs_devices": "Boards seen",
+    "inputs_devices_note": "A button board (DudesCab, Pinscape, keyboard encoder…) shows up here as soon as it is plugged in.",
+    "inputs_devices_none": "no button board seen (keyboard only)",
+    "inputs_press": "Press",
+    "inputs_waiting": "press now…",
+    "inputs_timeout": "nothing received — try again",
+    "inputs_more": "Show every action",
+    "inputs_less": "Show the essentials only",
+    "inputs_count": "%n button(s) recognised — they will be applied at install time.",
+    "inputs_skip_ok": "No button pressed: you will be able to do it in Map Commander."
   },
   "de": {
     "choose_lang": "Sprache auswählen",
@@ -612,7 +636,19 @@
     "hp_pos_SL": "Gehäuserückseite links",
     "hp_pos_SR": "Gehäuserückseite rechts",
     "hp_pos_C": "Backbox Mitte",
-    "hp_pos_LFE": "Subwoofer"
+    "hp_pos_LFE": "Subwoofer",
+    "inputs_title": "Tasten",
+    "inputs_hint": "Ihr Cabinet ist angeschlossen: drücken Sie jede Taste, PinCabOS erkennt sie. Optionaler Schritt — ohne ihn reagiert nur die Tastatur, und Sie mappen später in Map Commander.",
+    "inputs_devices": "Erkannte Karten",
+    "inputs_devices_note": "Eine Tastenkarte (DudesCab, Pinscape, Tastatur-Encoder…) erscheint hier, sobald sie angeschlossen ist.",
+    "inputs_devices_none": "keine Tastenkarte erkannt (nur Tastatur)",
+    "inputs_press": "Drücken",
+    "inputs_waiting": "jetzt drücken…",
+    "inputs_timeout": "nichts empfangen — erneut versuchen",
+    "inputs_more": "Alle Aktionen anzeigen",
+    "inputs_less": "Nur das Wesentliche",
+    "inputs_count": "%n Taste(n) erkannt — sie werden bei der Installation übernommen.",
+    "inputs_skip_ok": "Keine Taste gedrückt: Sie können es in Map Commander nachholen."
   },
   "it": {
     "choose_lang": "Scegli la tua lingua",
@@ -817,7 +853,19 @@
     "hp_pos_SL": "fondo del mobile sinistra",
     "hp_pos_SR": "fondo del mobile destra",
     "hp_pos_C": "centro backbox",
-    "hp_pos_LFE": "subwoofer"
+    "hp_pos_LFE": "subwoofer",
+    "inputs_title": "Pulsanti",
+    "inputs_hint": "Il tuo cabinato è collegato: premi ogni pulsante, PinCabOS lo riconosce. Passo facoltativo — senza, risponderà solo la tastiera e mapperai più tardi in Map Commander.",
+    "inputs_devices": "Schede viste",
+    "inputs_devices_note": "Una scheda pulsanti (DudesCab, Pinscape, encoder tastiera…) appare qui appena collegata.",
+    "inputs_devices_none": "nessuna scheda pulsanti vista (solo tastiera)",
+    "inputs_press": "Premi",
+    "inputs_waiting": "premi ora…",
+    "inputs_timeout": "nulla ricevuto — riprova",
+    "inputs_more": "Mostra tutte le azioni",
+    "inputs_less": "Solo l'essenziale",
+    "inputs_count": "%n pulsante/i riconosciuto/i — verranno applicati all'installazione.",
+    "inputs_skip_ok": "Nessun pulsante premuto: potrai farlo in Map Commander."
   },
   "es": {
     "choose_lang": "Elige tu idioma",
@@ -1022,6 +1070,18 @@
     "hp_pos_SL": "fondo del mueble izquierda",
     "hp_pos_SR": "fondo del mueble derecha",
     "hp_pos_C": "centro backbox",
-    "hp_pos_LFE": "subwoofer"
+    "hp_pos_LFE": "subwoofer",
+    "inputs_title": "Botones",
+    "inputs_hint": "Tu mueble está conectado: pulsa cada botón y PinCabOS lo reconoce. Paso opcional — sin él sólo responderá el teclado, y mapearás más tarde en Map Commander.",
+    "inputs_devices": "Tarjetas vistas",
+    "inputs_devices_note": "Una tarjeta de botones (DudesCab, Pinscape, codificador de teclado…) aparece aquí al conectarla.",
+    "inputs_devices_none": "ninguna tarjeta de botones vista (sólo teclado)",
+    "inputs_press": "Pulsar",
+    "inputs_waiting": "pulsa ahora…",
+    "inputs_timeout": "nada recibido — inténtalo de nuevo",
+    "inputs_more": "Ver todas las acciones",
+    "inputs_less": "Sólo lo esencial",
+    "inputs_count": "%n botón(es) reconocido(s) — se aplicarán en la instalación.",
+    "inputs_skip_ok": "Ningún botón pulsado: podrás hacerlo en Map Commander."
   }
 }

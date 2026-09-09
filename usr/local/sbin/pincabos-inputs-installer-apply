@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# PINCABOS_INSTALLEUR_BOUTONS_V1
+# Rejoue au premier démarrage le mappage capturé pendant l'installation.
+# Comme pour le ZeDMD, le drapeau est CONSERVÉ tant que l'écriture échoue :
+# le cabinet retentera au démarrage suivant plutôt que de perdre le choix.
+set -u
+DRAPEAU=/opt/pincabos/flags/inputs-installer.pending
+SOURCE=/opt/pincabos/config/inputs-installer.json
+
+[ -f "$DRAPEAU" ] || exit 0
+if [ ! -s "$SOURCE" ]; then
+    echo "aucun mappage de l'installateur à rejouer"
+    rm -f "$DRAPEAU"
+    exit 0
+fi
+
+if runuser -u pinball -- /usr/bin/python3 - "$SOURCE" <<'PY'
+import json
+import sys
+
+sys.path.insert(0, "/opt/pincabos/tools")
+import pincabos_vpx_input as vi
+
+mappings = (json.load(open(sys.argv[1])).get("mappings") or {})
+if not mappings:
+    print("mappage vide")
+    raise SystemExit(0)
+vi.write_mappings(mappings)
+vi.write_vpinfe(vi.vpinfe_values(mappings))
+print("mappage de l'installateur appliqué : %d action(s)" % len(mappings))
+PY
+then
+    rm -f "$DRAPEAU"
+else
+    echo "écriture du mappage refusée (voir Map Commander), drapeau conservé"
+fi
+exit 0

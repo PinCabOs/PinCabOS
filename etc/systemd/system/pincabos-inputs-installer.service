@@ -1,0 +1,15 @@
+[Unit]
+Description=PinCabOS - apply the buttons captured in the installer
+Documentation=https://pincabos.cc/
+# PINCABOS_INSTALLEUR_BOUTONS_V1 : ne tourne que si l'installateur a laissé un drapeau.
+ConditionPathExists=/opt/pincabos/flags/inputs-installer.pending
+ConditionKernelCommandLine=!pincabos.installer
+After=local-fs.target
+Before=pincabos-vpinfe.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/pincabos-inputs-installer-apply
+
+[Install]
+WantedBy=multi-user.target

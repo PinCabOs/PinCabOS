@@ -290,7 +290,23 @@ button{
   <div id="toys-strips"></div>
   <div class="hint" id="toys-status"></div>
   <div class="btns"><button class="ghost" onclick="go('st-sound')" data-i18n="back"></button>
-    <button class="primary" id="toys-next" onclick="loadNetwork(false);go('st-network')" data-i18n="next"></button></div>
+    <button class="primary" id="toys-next" onclick="loadInputs();go('st-inputs')" data-i18n="next"></button></div>
+</section>
+
+<!-- PINCABOS_INSTALLEUR_BOUTONS_V1 : le cabinet est branché, c'est le moment
+     d'appuyer sur ses boutons. Étape facultative : sans elle, le clavier reste. -->
+<section class="step" id="st-inputs">
+  <h2 data-i18n="inputs_title"></h2>
+  <p style="color:var(--muted);margin-bottom:12px" data-i18n="inputs_hint"></p>
+  <div class="card" style="margin-bottom:14px">
+    <div class="row" style="margin-bottom:4px"><label data-i18n="inputs_devices"></label><span id="inputs-devices" style="flex:1"></span></div>
+    <div class="hint" data-i18n="inputs_devices_note" style="margin-top:0"></div>
+  </div>
+  <div id="inputs-list"></div>
+  <div style="margin:10px 0"><a href="#" id="inputs-more" onclick="inputsMore();return false" data-i18n="inputs_more"></a></div>
+  <div class="hint" id="inputs-status"></div>
+  <div class="btns"><button class="ghost" onclick="go('st-toys')" data-i18n="back"></button>
+    <button class="primary" id="inputs-next" onclick="loadNetwork(false);go('st-network')" data-i18n="next"></button></div>
 </section>
 
 <section class="step" id="st-network">
@@ -577,6 +593,45 @@ function toggleDof(){S.dof.enabled=!S.dof.enabled;S.dof.touched=true;renderSound
 // (mapping au premier démarrage), cartes de sortie AutoConfig, contrôleurs de
 // rubans à déclarer (matrice backboard ou rubans, LEDs par sortie).
 S.toys={controllers:[]};
+// PINCABOS_INSTALLEUR_BOUTONS_V1 — l'étape Boutons.
+// On ne fait que CAPTURER : le moteur (pincabos_vpx_input) est le même que
+// Map Commander, et l'écriture sur la cible est rejouée au premier démarrage.
+S.inputs={mappings:{}};
+let inputsDet=null,inputsTout=false,inputsEnCours=false;
+function loadInputs(){fetch("/api/inputs").then(r=>r.json()).then(d=>{inputsDet=d;renderInputs()})
+  .catch(()=>{inputsDet={disponible:false,actions:[],peripheriques:[]};renderInputs()})}
+function inputsMore(){inputsTout=!inputsTout;renderInputs()}
+function inputsLabel(id){const v=S.inputs.mappings[id];return v?(S.inputs.labels&&S.inputs.labels[id]||v):""}
+function renderInputs(){
+  const d=inputsDet||{actions:[],peripheriques:[]};
+  const dv=document.getElementById("inputs-devices");
+  dv.textContent=(d.peripheriques||[]).length
+    ? d.peripheriques.map(p=>p.name+" ("+p.boutons+" "+t("toys_buttons")+")").join(" · ")
+    : t("inputs_devices_none");
+  const actions=(d.actions||[]).filter(a=>inputsTout||a.essentielle);
+  const l=document.getElementById("inputs-list");
+  l.innerHTML='<div class="card">'+actions.map(a=>{
+    const pris=inputsLabel(a.id);
+    return '<div class="row" style="margin-bottom:6px">'
+      +'<label style="flex:1">'+a.label+(a.essentielle?"":' <span style="opacity:.6">·</span>')+'</label>'
+      +'<code style="flex:1" id="in-v-'+a.id+'">'+(pris||"—")+'</code>'
+      +'<button class="ghost" onclick="captureAction(\''+a.id+'\')" data-i18n="inputs_press">'+t("inputs_press")+'</button>'
+      +(pris?'<button class="ghost" onclick="clearAction(\''+a.id+'\')">✕</button>':'')
+      +'</div>'}).join("")+'</div>';
+  document.getElementById("inputs-more").textContent=t(inputsTout?"inputs_less":"inputs_more");
+  const n=Object.keys(S.inputs.mappings).length;
+  document.getElementById("inputs-status").textContent=n?t("inputs_count").replace("%n",n):t("inputs_skip_ok")}
+function clearAction(id){delete S.inputs.mappings[id];if(S.inputs.labels)delete S.inputs.labels[id];renderInputs()}
+function captureAction(id){
+  if(inputsEnCours)return; inputsEnCours=true;
+  const c=document.getElementById("in-v-"+id); if(c)c.textContent=t("inputs_waiting");
+  fetch("/api/inputs/capture",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({delai:8})}).then(r=>r.json()).then(d=>{
+    inputsEnCours=false;
+    if(d&&d.binding){S.inputs.mappings[id]=d.binding;
+      S.inputs.labels=S.inputs.labels||{};S.inputs.labels[id]=d.label||d.binding}
+    else if(c)c.textContent=d&&d.timeout?t("inputs_timeout"):(d&&d.error||"—");
+    renderInputs()}).catch(()=>{inputsEnCours=false;renderInputs()})}
 let toysDet=null;
 function loadToys(){fetch("/api/toys").then(r=>r.json()).then(d=>{toysDet=d;
     if(!S.toys.touched){S.toys={controllers:(d.proposition&&d.proposition.controllers)||[]}}
@@ -780,7 +835,7 @@ setInterval(()=>{  // le temps ecoule prouve que ca vit, meme quand le moteur se
 // PINCABOS_INSTALLEUR_EGERIE_V3 (Yann) : Miss Tilt sur CHAQUE page, toujours a la meme place
 // (marge droite, pied de page), derriere le contenu, une pose differente par page.
 const EGERIE_PAGES={"st-lang":"pose-07-salut-futuriste","st-regional":"pose-03-debout-contrapposto","st-screens":"pose-extra-04",
-  "st-sound":"pose-06-marche-elegante","st-toys":"pose-10-trois-billes","st-network":"pose-extra-01","st-disk":"pose-02-assise-de-cote",
+  "st-sound":"pose-06-marche-elegante","st-toys":"pose-10-trois-billes","st-inputs":"pose-09-penchee-sur-bille","st-network":"pose-extra-01","st-disk":"pose-02-assise-de-cote",
   "st-confirm":"pose-08-un-genou-au-sol","st-progress":"pose-04-course-dynamique","st-done":"pose-05-heroique-bras-croises"};
 document.body.insertAdjacentHTML("beforeend",'<img class="egerie egerie-page" id="egerie" alt="" onerror="this.hidden=true">');
 function egeriePour(id){const im=document.getElementById("egerie"),p=EGERIE_PAGES[id];if(!im||!p)return;
