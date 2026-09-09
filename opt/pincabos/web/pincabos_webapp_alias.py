@@ -7,7 +7,7 @@ leurs chemins et leurs noms de fonction. `page()` (gabarit commun) est fourni pa
 from __future__ import annotations
 
 
-from flask import Blueprint, jsonify, redirect
+from flask import Blueprint, jsonify, redirect, request
 
 
 alias_bp = Blueprint("alias", __name__)
@@ -108,8 +108,58 @@ def pincabos_menu_close_tab_api():
 # === PINCABOS MENU CLOSE ACTIVE CHROME TAB END ===
 
 
+# === PINCABOS ABOUT SYSTEM AUDIT V1 START ===
+@alias_bp.after_app_request
+def pincabos_about_system_audit_button(response):
+    """Ajoute le bouton System Audit à About sans modifier son gros module historique."""
+    try:
+        if request.path.rstrip("/") != "/about":
+            return response
+        if response.status_code != 200 or response.is_streamed:
+            return response
+        if response.mimetype != "text/html":
+            return response
+
+        body = response.get_data(as_text=True)
+        if 'href="/system-audit"' in body:
+            return response
+
+        anchor = '<a class="button" href="/dev">🧪 Développeur / rapport testeur</a>'
+        button = '<a class="button" href="/system-audit">🩺 System Audit</a>'
+
+        if anchor in body:
+            body = body.replace(anchor, anchor + "\n  " + button, 1)
+        else:
+            marker = "<!-- PINCABOS_ABOUT_AUDIT_OVERVIEW_V1_START -->"
+            if marker in body:
+                body = body.replace(
+                    marker,
+                    '<div style="margin:10px 0 16px;">' + button + "</div>\n" + marker,
+                    1,
+                )
+            else:
+                return response
+
+        response.set_data(body)
+        response.headers["Content-Length"] = str(len(response.get_data()))
+        return response
+    except Exception:
+        return response
+# === PINCABOS ABOUT SYSTEM AUDIT V1 END ===
+
+
 def register(app, page_fn):
-    """Enregistre les alias historiques et la fermeture d'onglet sur l'application."""
+    """Enregistre les alias historiques, System Audit et la fermeture d'onglet."""
     global page
     page = page_fn
     app.register_blueprint(alias_bp)
+
+    # PINCABOS_SYSTEM_AUDIT_UI_V1
+    try:
+        from pincabos_system_audit_ui import register as _register_system_audit
+        _register_system_audit(app, page_fn)
+    except Exception as exc:
+        try:
+            app.logger.exception("PinCabOS System Audit registration failed: %s", exc)
+        except Exception:
+            pass
