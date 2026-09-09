@@ -1,0 +1,22 @@
+[Unit]
+Description=PinCabOS outbound Remote Support SSH relay
+After=network-online.target ssh.service
+Wants=network-online.target
+ConditionPathExists=/var/lib/pincabos-link/device.json
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/opt/pincabos/bin/pincabos-remote-support-agent
+Restart=always
+RestartSec=5
+TimeoutStopSec=5
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=false
+ReadWritePaths=/var/lib/pincabos-remote-support /home/pinball/.ssh
+
+[Install]
+WantedBy=multi-user.target
