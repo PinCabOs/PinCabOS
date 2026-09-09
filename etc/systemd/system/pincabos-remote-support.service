@@ -16,7 +16,8 @@ NoNewPrivileges=false
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=false
-ReadWritePaths=/var/lib/pincabos-remote-support /home/pinball/.ssh
+StateDirectory=pincabos-remote-support
+StateDirectoryMode=0700
 
 [Install]
 WantedBy=multi-user.target
