@@ -17,6 +17,11 @@
 #   --live accepte (compatibilite) ; --classic refuse (PINCABOS_ISO_MODELE_LIVE_V2)
 set -Eeuo pipefail
 
+# PINCABOS_RECETTE_IDEMPOTENTE_V3 : la construction tourne sans personne devant.
+# L etape 95 propose une publication web et attendait une reponse sur l entree
+# standard : elle a fige une construction 36 minutes (07/09/2026). Plus d entree.
+exec < /dev/null
+
 PCO_ISO_SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 export PCO_ISO_SCRIPT_DIR
 ETAPES_DIR="$PCO_ISO_SCRIPT_DIR/iso"
